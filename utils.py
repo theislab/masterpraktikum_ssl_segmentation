@@ -36,25 +36,25 @@ class EarlyStopping:
             self.best_score = current_score
             self.counter = 0
 
-class ClassificationModel(nn.Module):
+
+class NMFModel(nn.Module):
   def __init__(self, input_dim, num_classes):
-    super(ClassificationModel, self).__init__()
-    # Define layers of your model architecture
-    self.fc1 = nn.Linear(input_dim, 128)  # Adjust input size and hidden layer size based on your data complexity
-    self.relu = nn.ReLU()
-    self.dropout = nn.Dropout(p=0.2)  # Optional dropout for regularization
+    super(NMFModel, self).__init__()
+    self.fc1 = nn.Linear(input_dim, 128)
+    self.relu1 = nn.ReLU()
+    self.dropout1 = nn.Dropout(p=0.5)
     self.fc2 = nn.Linear(128, num_classes)
 
   def forward(self, x):
     x = self.fc1(x)
-    x = self.relu(x)
-    x = self.dropout(x)  # Apply dropout if enabled
+    x = self.relu1(x)
+    x = self.dropout1(x)
     x = self.fc2(x)
     return x
 
 
 def get_model(in_features, num_classes):
-    model = ClassificationModel(input_dim=in_features, num_classes=num_classes)
+    model = NMFModel(input_dim=in_features, num_classes=num_classes)
     return model
 
 

@@ -117,7 +117,7 @@ if __name__ == "__main__":
     best_model = [None, None]
 
     for fold, (train_idx, val_idx) in enumerate(kfold.split(data)):
-        print(f"kfold: {fold}")
+        print(f"kfold: {fold+1}")
         train_loader, val_loader = get_dataloaders(data, labels, train_idx, val_idx, batch_size=args.batch_size)
         model = get_model(in_features=train_loader.dataset[0][0].shape[0], num_classes=len(labels_map))
         early_stop = EarlyStopping(patience=args.es_patience)

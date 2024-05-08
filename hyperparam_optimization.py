@@ -9,9 +9,9 @@ if __name__ == "__main__":
     seed = 42
     lower_lr = 1e-4
     upper_lr = 1e-3
-    bs = 256
+    bs = 512
     np.random.seed(seed)
-    learning_rates = loguniform.rvs(lower_lr, upper_lr, size=3)
+    learning_rates = loguniform.rvs(lower_lr, upper_lr, size=4)
     param_grid = {'learning_rate': learning_rates}
     parameters = list(ParameterGrid(param_grid))
     for idx, val in enumerate(parameters):

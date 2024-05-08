@@ -4,6 +4,7 @@ from train import validate_batch
 from torch.nn import CrossEntropyLoss
 from pathlib import Path
 
+
 if __name__ == "__main__":
     seed_all(42)
     test_data = Path("data/adata_test_uncompressed.h5ad")
