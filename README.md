@@ -1,6 +1,6 @@
 # Build PyTorch Model
 
-Code repository for the exercise.
+Code repository for the exercise. A simple niche classifier for scRNA-seq data.
 
 ## Requirements
 * scanpy
@@ -15,7 +15,7 @@ Code repository for the exercise.
 ## Usage Notes
 ### Download the Data
 
-Data from "Spatial transcriptomics identifies pathological cell type niches in IPF" by [Mayr et al.](https://doi.org/10.1101/2023.12.13.571464) was used. 
+Data from "Spatial transcriptomics identifies pathological cell type niches in IPF" by [Mayr et al.](https://doi.org/10.1101/2023.12.13.571464) was used.
 
 Download the data (.h5ad) from https://zenodo.org/records/10012934 and save it in the data folder.
 
