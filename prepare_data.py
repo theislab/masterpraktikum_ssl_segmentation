@@ -6,7 +6,7 @@ from pathlib import Path
 # test set consist of 1x Healthy patient, 1x IPF patient, 1x public databse. It is approx. 21% of the entire dataset
 #
 
-file_path = Path("/Users/mathias/Code/masterpraktikum_ssl/Preprocess_toyST/adata_vis_human_spatial_paper.h5ad")
+file_path = Path("data/adata_vis_human_spatial_paper.h5ad")
 adata = sc.read(file_path)
 sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1500, subset=False)
 variable_genes = adata.var.highly_variable

@@ -138,13 +138,11 @@ if __name__ == "__main__":
                 if early_stop.should_stop:
                     print(f"Stopped early at epoch: {epoch+1}")
                     total_loss[fold] = early_stop.best_score
-
                     # module to find best model for saving
                     # technically retraining on entire trainval required but this is just an exercise
                     if early_stop.best_score < best_model[0]:
                         best_model[0] = early_stop.best_score
                         best_model[1] = model
-                    
                     break
             
     

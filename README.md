@@ -12,6 +12,12 @@ Code repository for this exercise. A simple niche classifier for scRNA-seq data.
 * pathlib
 * tqdm
 
+## Evaluation Results
+
+|              Model | F1_val | F1_test |
+|-------------------:|-------:|--------:|
+|  NicheNN_best_fold | 0.938  |   0.914 |
+
 ## Usage Notes
 ### Download the Data
 
