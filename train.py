@@ -114,7 +114,7 @@ if __name__ == "__main__":
     total_loss = np.zeros(args.kfold)
     kfold = KFold(n_splits=args.kfold, shuffle=False)
     data, labels, labels_map = get_data(train_data)
-    best_model = [None, None]
+    best_model = [99999, None]
 
     for fold, (train_idx, val_idx) in enumerate(kfold.split(data)):
         print(f"kfold: {fold+1}")
@@ -141,17 +141,14 @@ if __name__ == "__main__":
 
                     # module to find best model for saving
                     # technically retraining on entire trainval required but this is just an exercise
-                    if fold == 0:
-                        best_model[0] = model
-                        best_model[1] = early_stop.best_score
-                    elif best_model[1] < early_stop.best_score:
-                        best_model[0] = model
-                        best_model[1] = early_stop.best_score
+                    if early_stop.best_score < best_model[0]:
+                        best_model[0] = early_stop.best_score
+                        best_model[1] = model
                     
                     break
             
     
-    save_model(best_model[0], args.encoder, epoch, len(labels_map), train_loader.dataset[0][0].shape[0], args.lr, args.lr_scheduler_factor, save_path=model_save_path, fname=fname)
+    save_model(best_model[1], args.encoder, epoch, len(labels_map), train_loader.dataset[0][0].shape[0], args.lr, args.lr_scheduler_factor, save_path=model_save_path, fname=fname)
     val_log.append([0, 0, 0, np.mean(total_loss), 0])
     val_log = np.asarray(val_log)
     np.savetxt(f"{str(log_path)}/{fname}.csv", val_log, delimiter=",", fmt=["%d", "%d", "%.5f", "%.5f", "%.5f"])
