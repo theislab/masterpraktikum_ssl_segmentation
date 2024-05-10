@@ -15,7 +15,7 @@ Code repository for this exercise. A simple niche classifier for scRNA-seq data.
 ## Evaluation Results
 
 <p align="left">
-    <img src="data/Screenshot 2024-05-09 at 16.09.54.png" alt="pipeline" width="45%"/>
+    <img src="data/Screenshot 2024-05-09 at 16.09.54.png" alt="loss_plot" width="60%"/>
 </p>
 
 |              Model | F1_val | F1_test |
