@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from pathlib import Path
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 from utils import EarlyStopping, seed_all, get_model, save_model
 from dataset import get_data, get_dataloaders
@@ -112,20 +112,21 @@ if __name__ == "__main__":
     val_log = []
 
     total_loss = np.zeros(args.kfold)
-    kfold = KFold(n_splits=args.kfold, shuffle=False)
+    kfold = StratifiedKFold(n_splits=args.kfold) # automatically shuffled during dataloader creating and numpy seed is already set to 42 
     data, labels, labels_map = get_data(train_data)
-    best_model = [99999, None]
+    num_classes, in_features = len(labels_map), data[0].shape[0]
+    best_model = [np.inf, None]
 
-    for fold, (train_idx, val_idx) in enumerate(kfold.split(data)):
-        print(f"kfold: {fold+1}")
-        train_loader, val_loader = get_dataloaders(data, labels, train_idx, val_idx, batch_size=args.batch_size)
-        model = get_model(in_features=train_loader.dataset[0][0].shape[0], num_classes=len(labels_map))
+    for fold, (train_idx, val_idx) in enumerate(kfold.split(data, labels)):
+        print(f"kfold: {fold+1}/{args.kfold}")
+        model = get_model(in_features=in_features, num_classes=num_classes)
         early_stop = EarlyStopping(patience=args.es_patience)
         criterion = CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", verbose=True, factor=args.lr_scheduler_factor, min_lr=1e-5, patience=args.lr_scheduler_patience)
         model = model.to(device)
+        train_loader, val_loader = get_dataloaders(data, labels, train_idx, val_idx, batch_size=args.batch_size)
 
         for epoch in range(args.max_epochs):  # loop over the dataset
             train_loss = train_epoch(train_loader, model, optimizer, criterion, epoch, device)
@@ -135,9 +136,11 @@ if __name__ == "__main__":
                 val_log.append([fold, epoch, train_loss, val_loss, f1_s])
                 early_stop(val_loss)
                 scheduler.step(metrics=val_loss)
+
                 if early_stop.should_stop:
                     print(f"Stopped early at epoch: {epoch+1}")
                     total_loss[fold] = early_stop.best_score
+
                     # module to find best model for saving
                     # technically retraining on entire trainval required but this is just an exercise
                     if early_stop.best_score < best_model[0]:
@@ -145,8 +148,8 @@ if __name__ == "__main__":
                         best_model[1] = model
                     break
             
-    
-    save_model(best_model[1], args.encoder, epoch, len(labels_map), train_loader.dataset[0][0].shape[0], args.lr, args.lr_scheduler_factor, save_path=model_save_path, fname=fname)
+    # epoch parameter does not represent the real epoch of corresponding kfold but the last fold's epoch. Since variable to utilized it does not matter anyway
+    save_model(best_model[1], args.encoder, epoch, num_classes, in_features, args.lr, args.lr_scheduler_factor, save_path=model_save_path, fname=fname)
     val_log.append([0, 0, 0, np.mean(total_loss), 0])
     val_log = np.asarray(val_log)
     np.savetxt(f"{str(log_path)}/{fname}.csv", val_log, delimiter=",", fmt=["%d", "%d", "%.5f", "%.5f", "%.5f"])
