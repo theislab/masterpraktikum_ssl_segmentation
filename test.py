@@ -9,7 +9,7 @@ if __name__ == "__main__":
     seed_all(42)
     test_data = Path("data/adata_test_uncompressed.h5ad")
     model_save_path = Path("models/")
-    model_fname = "1_Niche_classifier"
+    model_fname = "4_Niche_classifier"
     bs = 512
     device = "mps"
 
