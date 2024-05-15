@@ -8,10 +8,16 @@ Pathological image segmentation, such as segmenting cells or tissues in medical 
 This project aims to develop a model that integrates histological images and gene expression data obtained through spatial omics technologies like Visium. The primary goal is to assign each spot into specific pathological regions in order to study spatial patterns leading to disease development. These regions can further be examined for identification of new biomarkers or for drug target discovery. This project will leverage self-supervised learning to effectively utilize both labeled and unlabeled data, addressing the common challenge of limited labeled data sets in medical image research.
 
 ### Supervisors
+#### PhD students
 - Merel Kuijs merelsentina.kuijs@helmholtz-munich.de
 - Soroor Hediyeh-zadeh soroor.hediyehzadeh@helmholtz-munich.de
 - Rushin Gindra rushin.gindra@helmholtz-munich.de
 - Till Richter till.richter@helmholtz-munich.de
+- Korbinian Träuble korbinian.traeuble@helmholtz-munich.de
+- Justus Wettich justus.wettich@tum.de
+#### PIs
+Please don't reach out to the PIs directly. If you have questions about the project, ask the PhD students first.
+- Matthias Heinig matthias.heinig@helmholtz-muenchen.de
 - Fabian Theis fabian.theis@helmholtz-munich.de
 
 ### Proposed period and modality 
