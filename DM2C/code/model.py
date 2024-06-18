@@ -7,17 +7,10 @@ import os
 import itertools
 import pdb
 
-import numpy as np
-from PIL import Image
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-import anndata as ad
-from transformers import AutoImageProcessor, AutoModel
-from CellPLM_repo.CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 from utils import *#, SFeatDataSet
 
 logging.basicConfig(level=logging.INFO,
@@ -84,7 +77,7 @@ class Vision_Trans():
                 return outputs.pooler_output.detach().squeeze(dim=0)
 
             embeds=[infer(image) for image in imgs]
-            return embeds
+            return torch.stack(embeds)
 
 class MultimodalGAN:
     def __init__(self, args, config):
@@ -102,18 +95,20 @@ class MultimodalGAN:
         self.cell_plm = CellPLM_model(self.args.cellplm_model)
         self.vis_trans = Vision_Trans(self.args.hugging_face)
 
-        #self._build_dataloader()
-        self._build_masterpraktikum_dataloader()
-
         # Generator
         # adjusted for the masterpraktikum
         self.latent_dim_img = self.config['img_input_dim']
         self.latent_dim_txt = self.config['txt_input_dim']
+        self.latent_dim = min(self.config['img_input_dim'], self.config['txt_input_dim'])
+
+        # self._build_dataloader()
+        self._build_masterpraktikum_dataloader()
+
         # adjusted for masterpraktikum dataset
-        self.img2txt = DeepAE(input_dim=self.latent_dim_img,
+        self.img2txt = DeepAE(input_dim=self.latent_dim,
                               hiddens=config['img2txt_hiddens'],
                               batchnorm=config['batchnorm'])
-        self.txt2img = DeepAE(input_dim=self.latent_dim_txt,
+        self.txt2img = DeepAE(input_dim=self.latent_dim,
                               hiddens=config['txt2img_hiddens'],
                               batchnorm=config['batchnorm'])
 
@@ -122,14 +117,14 @@ class MultimodalGAN:
         # of already produced embeddings for each of the modalities i.e. the image discriminator looks at the
         # discriminator embeddings
         self.D_img = nn.Sequential(
-            nn.Linear(self.latent_dim_img, int(self.latent_dim_img / 4)),
+            nn.Linear(self.latent_dim, int(self.latent_dim / 4)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(int(self.latent_dim_img / 4), 1)
+            nn.Linear(int(self.latent_dim / 4), 1)
         )
         self.D_txt = nn.Sequential(
-            nn.Linear(self.latent_dim_txt, int(self.latent_dim_txt / 4)),
+            nn.Linear(self.latent_dim, int(self.latent_dim / 4)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(int(self.latent_dim_txt / 4), 1)
+            nn.Linear(int(self.latent_dim / 4), 1)
         )
 
         # Optimizer
@@ -164,25 +159,19 @@ class MultimodalGAN:
     # no pretraining needed (def deleted)
     def train(self, epoch):
         self.set_model_status(training=True)
-
-
         for step, (txt_embed, img_embed) in enumerate(self.train_loader):
-            # ids, feats, modalitys, labels = \
-            #    ids.cuda(), feats.cuda(), modalitys.cuda(), labels.cuda()
-
             # -----------------
             #  Train Generator
             # -----------------
-
             self.optimizer_G.zero_grad()
 
             img_batch_size = img_embed.size(0)
             txt_batch_size = txt_embed.size(0)
-            _, img2txt_recon = self.img2txt(img_embed)
-            _, img_latent_recon= self.txt2img(img2txt_recon)
-            _, txt2img_recon = self.txt2img(txt_embed)
-            _, txt_latent_recon = self.img2txt(txt2img_recon)
 
+            img2txt_recon, _ = self.img2txt(img_embed)
+            img_latent_recon, _ = self.txt2img(img2txt_recon)
+            txt2img_recon, _ = self.txt2img(txt_embed)
+            txt_latent_recon, _ = self.img2txt(txt2img_recon)
 
             img_cycle_loss = F.l1_loss(img_embed, img_latent_recon)
             txt_cycle_loss = F.l1_loss(txt_embed, txt_latent_recon)
@@ -258,44 +247,48 @@ class MultimodalGAN:
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_path)
 
-        # we need to embed the h5ad data fisrt so we can input them into the dataloader
-        h5ad_embed = [[embed, [0]] for embed in self.cell_plm.calc_embed(h5ad_dataset.data)]
+        # we need to embed the h5ad data first so we can input them into the dataloader
+        h5ad_embed = torch.stack([embed for embed in self.cell_plm.calc_embed(h5ad_dataset.data)])
         # same with images -- embed first
-        img_loader = DataLoader(dataset = img_dataset, #image loader so that not all images are read into memory for embedding calculation
+        img_loader = DataLoader(dataset = img_dataset, # image loader so that not all images are read into memory for embedding calculation
                                 batch_size= self.args.batch_size,
                                 shuffle = True)
         img_embed=[]
         for load in img_loader:
-            img_embed.append(self.vis_trans.calc_embed(load))
-        img_embed = [[embed, [1]] for embed in img_embed[0]]
+            img_embed.extend(self.vis_trans.calc_embed(load))
+        img_embed = torch.stack(img_embed)
+        # use pca to get same dimension:
+        if self.config['img_input_dim'] != self.config['txt_input_dim']:  # only in case that the dim are not the same
+            print("Running PCA since dimensions don't match")
+            if self.latent_dim == self.config['img_input_dim']: # if the min is the image dim
+                h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
+            else:
+                img_embed = run_PCA_on_modal(img_embed, self.latent_dim)
 
+        # add 0 / 1 so we can distinguish the modalities
+        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        train_data = h5ad_embed + img_embed
+        train_data = torch.cat((h5ad_embed, img_embed), dim=0)
 
-        self.train_loader = Custom_Dataloader(dataset=train_data,
+        self.train_loader = Custom_Dataloader(dataset=train_data, modal = modalities,
                                        batch_size=self.args.batch_size,
                                        shuffle=True)
-        self.train_loader_ordered = Custom_Dataloader(dataset=train_data,
+        self.train_loader_ordered = Custom_Dataloader(dataset=train_data, modal = modalities,
                                                batch_size=self.args.batch_size,
                                                shuffle=False)
 
 
-    def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions?
+    def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions
         self.set_model_status(training=False)
         with torch.no_grad():
-            for  step, (txt_embed, img_embed) in enumerate(dataloader):
+            latent = None
+            for step, (txt_embed, img_embed) in enumerate(dataloader):
                 if unify_modal == 'img':
-                    _, latent = self.txt2img(txt_embed)
+                    latent, _ = self.txt2img(txt_embed)
                 elif unify_modal == 'txt':
-                    _, latent = self.img2txt(img_embed)
+                    latent, _ = self.img2txt(img_embed)
                 else:
                     latent = (txt_embed, img_embed)
-                # latent = latent_code if step == 0 else torch.cat(
-                #    [latent, latent_code], 0)
-                # target = labels if step == 0 else torch.cat(
-                #    [target, labels], 0)
-                # modality = modalitys if step == 0 else torch.cat(
-                #    [modality, modalitys], 0)
             return latent.cpu().numpy()
 
 

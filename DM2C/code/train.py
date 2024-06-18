@@ -104,8 +104,8 @@ if __name__ == '__main__':
         # config['img_hiddens'] = [512, 256, 128]
         # config['txt_hiddens'] = [512, 128]
         # should be between the real dimenstions
-        config['img2txt_hiddens'] = [768, 512]
-        config['txt2img_hiddens'] = [512, 768]
+        config['img2txt_hiddens'] = [512, 512]
+        config['txt2img_hiddens'] = [512, 512]
         # config['has_filename'] = False
     config['batchnorm'] = True
     config['cuda'] = use_cuda

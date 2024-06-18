@@ -11,6 +11,7 @@ import numpy as np
 import scipy.io as sio
 from PIL import Image
 from torch.utils.data import Dataset
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from transformers import AutoImageProcessor, AutoModel
@@ -76,43 +77,40 @@ class img_Dataset(Dataset):
         return len(self.imgs)
 
 class Custom_Dataloader():
-    def __init__(self, dataset, batch_size=32, shuffle=True):
-        self.dataset, self.batch_size, self.shuffle = dataset, batch_size, shuffle
+    def __init__(self, dataset, modal, batch_size=32, shuffle=True):
+        self.dataset, self.modal, self.batch_size, self.shuffle = dataset, modal, batch_size, shuffle
     def __iter__(self):
         indices = np.arange(len(self.dataset))
         if self.shuffle:
             indices = np.random.permutation(len(self.dataset))
         batches = []
-        batch = []
+        txt_batch, img_batch = [], []
         for index in indices:  # iterate over indices using the iterator
-            batch.append(self.dataset[index])
-            if len(batch) == self.batch_size:
-                txt_embed = []
-                img_embed = []
-                for item in batch:
-                    if item[1] == 0:
-                        txt_embed.append(item[0])
-                    else: img_embed.append(item[0])
-                batches.append(batch)
-                batch = []
-                yield torch.stack(txt_embed, dim=0), torch.stack(img_embed, dim=0)
-        batch = []
-        for i in indices[len(batches) * self.batch_size:len(self.dataset)]:
-            batch.append(self.dataset[i])
-        txt_embed = []
-        img_embed = []
-        for item in batch:
-            if item[1][0] == 0:
-                txt_embed.append(item[0])
-            else:
-                img_embed.append(item[0])
-        batches.append(batch)
-        yield torch.stack(txt_embed, dim=0), torch.stack(img_embed, dim=0)
+            if self.modal[index] == 0:
+                txt_batch.append(self.dataset[index])
+            else: img_batch.append(self.dataset[index])
+            if len(txt_batch) + len(img_batch) == self.batch_size:
+                batches.append([txt_batch, img_batch ])
+                yield torch.stack(txt_batch), torch.stack(img_batch)
+                txt_batch, img_batch = [], []
+        if len(txt_batch) > 0 and len(img_batch) > 0: # return last batch only if both modalities have it
+            batches.append([txt_batch, img_batch])
+            yield torch.stack(txt_batch), torch.stack(img_batch)
     def __len__(self):
         dataset_length = len(self.dataset)
         batch_number = dataset_length / self.batch_size
         length = math.ceil(batch_number)
         return length
+
+def run_PCA_on_modal(x, n_feat):
+    ''' have to wait for bigger dataset with this
+    x = x.detach().numpy()
+    x = StandardScaler().fit_transform(x)
+    pca = PCA(n_components=n_feat)
+    x = pca.fit_transform(x)
+    return torch.tensor(x)
+    '''
+    return x[:, :n_feat] # for no only take the first 512 to match the dimensions
 
 def best_map(L1, L2):
     # L1 should be the ground-truth labels and L2 should be the clustering labels we got
