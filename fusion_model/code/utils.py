@@ -10,12 +10,16 @@ import torch.nn.functional as F
 import numpy as np
 import scipy.io as sio
 from PIL import Image
+import requests
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from sklearn import metrics
 from sklearn.metrics.cluster import contingency_matrix
 from munkres import Munkres
+from transformers import ViTImageProcessor
+
+import anndata as ad
 
 
 class MFeatDataSet(Dataset):
@@ -42,19 +46,20 @@ class MFeatDataSet(Dataset):
         return self.lens
 
 
-class SFeatDataSet(Dataset):
-    '''Single modal feature'''
-
-    def __init__(self, file_mat):
-        self.file_mat = sio.loadmat(file_mat)
-        self.lens = len(self.file_mat['X'])
-
-    def __getitem__(self, index):
-        feat = self.file_mat['X'][index][0].squeeze().astype(np.float32)
-        return feat
+class CustomDataset(Dataset):
+    def __init__(self, img_emb, cell_emb):
+        self.data = img_emb + cell_emb
+        self.modalities = [0] * len(img_emb) + [1] * len(cell_emb)
 
     def __len__(self):
-        return self.lens
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        # returns the tensor with data and corresponding label in a tuple
+        data_point = self.data[idx]
+        modality_label = self.modalities[idx]
+
+        return data_point, modality_label
 
 
 def best_map(L1, L2):

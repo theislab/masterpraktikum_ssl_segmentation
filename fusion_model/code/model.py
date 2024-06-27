@@ -2,26 +2,20 @@
 # python3 train.py --lr_g 1e-4 --lr_d 5e-5 --gan_type wasserstein --n_epochs 250 --weight_decay 0 --lamda3 0.5 --lamda1 1 --lr_c 5e-4
 from __future__ import print_function, absolute_import, division
 
-import logging
-import os
 import itertools
-import pdb
+import logging
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import pandas as pd
 import torch.optim as optim
-from torch.utils.data import DataLoader
-from tensorboardX import SummaryWriter
-
-from transformers import ViTImageProcessor, ViTForImageClassification
-
 from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
+from tensorboardX import SummaryWriter
+from torch.utils.data import DataLoader
+from transformers import ViTForImageClassification
 
-from PIL import Image
-import requests
+from utils import *
 
-from utils import MFeatDataSet, SFeatDataSet
+use_cuda = torch.cuda.is_available()
+DEVICE = torch.device('cuda:0' if use_cuda else 'cpu')
 
 logging.basicConfig(level=logging.INFO,
                     filename='output.log',
@@ -30,39 +24,57 @@ logging.basicConfig(level=logging.INFO,
 info_string1 = ('Epoch: %3d/%3d|Batch: %2d/%2d||D_loss: %.4f|D1_loss: %.4f|'
                 'D2_loss: %.4f||G_loss: %.4f|R1_loss: %.4f|R2_loss: %.4f|R121_loss: %.4f|'
                 'R212_loss: %.4f')
+
+
 class ViT_AE():
     """Vision Transformer Autoencoder"""
 
     def __init__(self):
-        # super(ViTAE, self).__init__()
         self.processor = ViTImageProcessor.from_pretrained('google/vit-base-patch16-224')
-        model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', output_hidden_states=True)
+        self.model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', output_hidden_states=True)
 
-        self.encoder = model.vit.encoder
-        self.decoder = model.vit.encoder
-
-        self.depth = 768
-        self.channels = [1024, 197, 768]
-        self.parameters = model.config
-
+        # self.encoder = model.vit.encoder
 
     def forward(self, x):
-        x = self.processor(images=x, return_tensors="pt")
-        latent = self.encoder(x)
-        output = self.decoder(latent)
-        return output, latent
+        print("ViT_AE forward")
+        print(x)
+
+        pca_latent = PCA(n_components=512)
+        latents = []
+
+        for img in x:
+            image = Image.open(img)
+            input = self.processor(images=image, return_tensors="pt")
+            output = self.model(**input)
+            hidden_states = output.hidden_states
+            print("Hidden states: ", hidden_states[-1].shape)
+
+            latent = hidden_states[-1][0][0]
+            print("Hidden states2: ", hidden_states[-1][0].shape)
+            print("Hidden states3: ", hidden_states[-1][0][0].shape)
+            # print(latent)
+            # use pca to get same embedding shape as the cell embedding
+            latents.append(latent)
+        latents = pd.DataFrame(latents)
+        print(latents.shape)
+        # latents = latents.transpose()
+        # print(latents.shape)
+        principal_components_latents = pca_latent.fit_transform(latents)
+
+        return principal_components_latents
+
 
 class CellPLM_AE():
-    def __init__(self):
-        pipeline = CellEmbeddingPipeline(pretrain_prefix='20231027_85M',  # Specify the pretrain checkpoint to load
-                                     pretrain_directory='../ckpt')
-        self.encoder = pipeline
-        self.decoder = pipeline
+    def __init__(self, model):
+        self.pipeline = CellEmbeddingPipeline(pretrain_prefix=model,  # Specify the pretrain checkpoint to load
+                                              pretrain_directory='ckpt')
+        self.device = DEVICE
+        self.encoder = self.pipeline
 
     def forward(self, x):
-        latent = self.encoder(x)
-        output = self.decoder(latent)
-        return output, latent
+        latent = self.encoder.predict(x,  # An AnnData object
+                                      device=DEVICE)  # Specify a gpu or cpu for model inference
+        return latent
 
 
 class DeepAE(nn.Module):
@@ -92,7 +104,6 @@ class DeepAE(nn.Module):
                 decoder_layers.append(nn.BatchNorm1d(self.channels[i - 1]))
         self.decoder = nn.Sequential(*decoder_layers)
 
-
     def forward(self, x):
         latent = self.encoder(x)
         output = self.decoder(latent)
@@ -112,32 +123,22 @@ class MultimodalGAN:
         for k, v in sorted(self.config.items()):
             self.logger.debug("{0}: {1}".format(k, v))
 
-        #assert config['img_hiddens'][-1] == config['txt_hiddens'][-1],\
-        #    'Inconsistent latent dim!'
+        assert config['img_hiddens'][-1] == config['txt_hiddens'][-1], \
+            'Inconsistent latent dim!'
 
-        self._build_dataloader()
+        # Visual transformer embedding
+        self.imgAE = ViT_AE()
+
+        # CellPLM embedding
+        self.txtAE = CellPLM_AE(model='20231027_85M')
+
+        # self._build_dataloader()
+        self._build_dataloader_masterpraktikum()
 
         # Generator
         self.latent_dim = config['img_hiddens'][-1]
         print("latent_dim: ", self.latent_dim)
         # Autoencoders imgAE and txtAE
-        """
-        self.imgAE = DeepAE(input_dim=config['img_input_dim'],
-                            hiddens=config['img_hiddens'],
-                            batchnorm=config['batchnorm'])
-        print(self.imgAE)
-        print(self.imgAE.parameters())
-        for i in self.imgAE.parameters():
-            print(i)
-        """
-        self.imgAE = ViT_AE()
-        print(self.imgAE)
-        """
-        self.txtAE = DeepAE(input_dim=config['txt_input_dim'],
-                            hiddens=config['txt_hiddens'],
-                            batchnorm=config['batchnorm'])
-        """
-        self.txtAE = CellPLM_AE()
 
         # Generators img2txt and txt2img
         self.img2txt = DeepAE(input_dim=self.latent_dim,
@@ -158,21 +159,15 @@ class MultimodalGAN:
             nn.Linear(int(self.latent_dim / 4), 1)
         )
         print(">>> Loading models done")
-        print(self.imgAE.parameters())
-        # Optimizer
-        self.optimizer_G1 = optim.Adam(
-            self.imgAE.parameters(), lr=self.args.lr_ae,
-            betas=(self.args.b1, self.args.b2),
-            weight_decay=self.args.weight_decay)
-        self.optimizer_G2 = optim.Adam(
-            self.txtAE.parameters(), lr=self.args.lr_ae,
-            betas=(self.args.b1, self.args.b2),
-            weight_decay=self.args.weight_decay)
-        params = [{'params': itertools.chain(
-            self.imgAE.parameters(), self.txtAE.parameters())},
+        # Optimizer for Generators and Discriminators
+
+        params = [
+            # {'params': itertools.chain( self.imgAE.parameters(), self.txtAE.parameters())},       not needed
+            # because we don't optimize the embedders
             {'params': itertools.chain(
                 self.img2txt.parameters(), self.txt2img.parameters()),
-             'lr': self.args.lr_ae}]
+                'lr': self.args.lr_ae}]
+
         if self.args.gan_type == 'wasserstein':
             self.optimizer_D = optim.RMSprop(
                 itertools.chain(
@@ -194,48 +189,20 @@ class MultimodalGAN:
                 params,
                 lr=self.args.lr_g, betas=(self.args.b1, self.args.b2),
                 weight_decay=self.args.weight_decay)
-
         self.set_writer()
         self.adv_loss_fn = F.binary_cross_entropy_with_logits
-    """
-    def pretrain(self, modal='img'):
-        self.set_model_status(training=True)
-        if modal == 'img':
-            AE = self.imgAE
-            optimizer = self.optimizer_G1
-        elif modal == 'txt':
-            AE = self.txtAE
-            optimizer = self.optimizer_G2
-        dataloader = self._build_pretrain_dataloader(modal)
-        for epoch in range(self.args.n_epochs):
-            for i, feats in enumerate(dataloader):
-                feats = feats.cuda()
-                optimizer.zero_grad()
 
-                feats_recon, feats_latent = AE(feats)
-                recon_loss = F.mse_loss(feats, feats_recon)
-
-                recon_loss.backward()
-                optimizer.step()
-
-                if (i + 1) % self.args.log_freq == 0:
-                    self.logger.info(
-                        "Epoch: %d/%d|Batch: %d/%d|Recon_loss: %.4f"
-                        % (epoch, self.args.n_epochs, i,
-                           len(dataloader), recon_loss.item())
-                    )
-
-            if (epoch + 1) % self.args.save_freq == 0:
-                self.save_pretrain_cpt(epoch, modal)
-    """
     def train(self, epoch):
-        self.set_model_status(training=True)
+        # self.set_model_status(training=True)
         print("train_loader: ", self.train_loader)
         print("train_loader.dataset: ", self.train_loader.dataset)
-        processor = ViTImageProcessor.from_pretrained('google/vit-base-patch16-224')
-        for step, (ids, feats, modalitys, labels) in enumerate(self.train_loader):
-            #ids, feats, modalitys, labels =\
-                #ids.cuda(), feats.cuda(), modalitys.cuda(), labels.cuda()
+
+        # for step, (ids, feats, modalitys, labels) in enumerate(self.train_loader):
+
+        for step, (txt_embed, img_embed) in enumerate(self.train_loader):
+
+            ids, feats, modalitys, labels = \
+                ids.to(DEVICE), feats.to(DEVICE), modalitys.to(DEVICE), labels.to(DEVICE)
 
             modalitys = modalitys.view(-1)
 
@@ -255,56 +222,35 @@ class MultimodalGAN:
             img_batch_size = img_feats.size(0)
             txt_batch_size = txt_feats.size(0)
 
-            # process
-            #img_feats = processor(images=img_feats, return_tensors="pt")
-
-            imgs_recon, imgs_latent = self.imgAE(img_feats[1])
-            #print(">imgs_recon: ", imgs_recon.shape)
-            #print(">imgs_latent: ", imgs_latent.shape)
-            txts_recon, txts_latent = self.txtAE(txt_feats)
+            imgs_latent = self.imgAE.forward(img_feats[1])
+            txts_latent = self.txtAE.forward(txt_feats)
             img2txt_recon, _ = self.img2txt(imgs_latent)
             img2txt_recon, x = self.img2txt(imgs_latent)
             print(x.shape)
             img_latent_recon, _ = self.txt2img(img2txt_recon)
-            #print(">img2txt_recon: ", img2txt_recon.shape)
+            # print(">img2txt_recon: ", img2txt_recon.shape)
             txt2img_recon, _ = self.txt2img(txts_latent)
             txt_latent_recon, _ = self.img2txt(txt2img_recon)
 
-            img_recon_loss = F.mse_loss(img_feats, imgs_recon)
-            txt_recon_loss = F.mse_loss(txt_feats, txts_recon)
+            # we only want to keep the L1 cycle losses
             img_cycle_loss = F.l1_loss(imgs_latent, img_latent_recon)
             txt_cycle_loss = F.l1_loss(txts_latent, txt_latent_recon)
-            img_cycle_recon_loss = F.mse_loss(
-                img_feats, self.imgAE.decoder(img_latent_recon))
-            txt_cycle_recon_loss = F.mse_loss(
-                txt_feats, self.txtAE.decoder(txt_latent_recon))
-            recon_loss = img_recon_loss + txt_recon_loss +\
-                (img_cycle_loss + txt_cycle_loss) * self.args.lamda1 +\
-                (img_cycle_recon_loss + txt_cycle_recon_loss)
 
-            #img_real = torch.ones(img_batch_size, 1).cuda()
-            #img_fake = torch.zeros(img_batch_size, 1).cuda()
-            #txt_real = torch.ones(txt_batch_size, 1).cuda()
-            #txt_fake = torch.zeros(txt_batch_size, 1).cuda()
-
-            img_real = torch.ones(img_batch_size, 1)
-            img_fake = torch.zeros(img_batch_size, 1)
-            txt_real = torch.ones(txt_batch_size, 1)
-            txt_fake = torch.zeros(txt_batch_size, 1)
+            img_real = torch.ones(img_batch_size, 1).to(DEVICE)
+            img_fake = torch.zeros(img_batch_size, 1).to(DEVICE)
+            txt_real = torch.ones(txt_batch_size, 1).to(DEVICE)
+            txt_fake = torch.zeros(txt_batch_size, 1).to(DEVICE)
 
             print(">>img_real: ", img_real.shape)
             print(">>img_fake: ", img_fake.shape)
 
             if self.args.gan_type == 'naive':
-                d_loss = self.adv_loss_fn(self.D_img(txt2img_recon), txt_real) +\
-                    self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
+                d_loss = self.adv_loss_fn(self.D_img(txt2img_recon), txt_real) + \
+                         self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
             elif 'wasserstein' in self.args.gan_type:
                 d_loss = -self.D_img(txt2img_recon).mean() - \
-                    self.D_txt(img2txt_recon).mean()
+                         self.D_txt(img2txt_recon).mean()
 
-            G_loss = recon_loss + self.args.lamda3 * d_loss
-
-            G_loss.backward()
             self.optimizer_G.step()
 
             # ---------------------
@@ -321,10 +267,10 @@ class MultimodalGAN:
                                   self.adv_loss_fn(self.D_txt(img2txt_recon.detach()), img_fake)) / 2
                     D_loss = (img_D_loss + txt_D_loss) * self.args.lamda3
                 elif self.args.gan_type == 'wasserstein':
-                    img_D_loss = self.D_img(txt2img_recon.detach()).mean() -\
-                        self.D_img(imgs_latent.detach()).mean()
-                    txt_D_loss = self.D_txt(img2txt_recon.detach()).mean() -\
-                        self.D_txt(txts_latent.detach()).mean()
+                    img_D_loss = self.D_img(txt2img_recon.detach()).mean() - \
+                                 self.D_img(imgs_latent.detach()).mean()
+                    txt_D_loss = self.D_txt(img2txt_recon.detach()).mean() - \
+                                 self.D_txt(txts_latent.detach()).mean()
                     D_loss = (img_D_loss + txt_D_loss) * self.args.lamda3
                 D_loss.backward()
                 self.optimizer_D.step()
@@ -342,12 +288,8 @@ class MultimodalGAN:
                 self.logger.info(info_string1 % (
                     epoch, self.args.n_epochs, step, len(self.train_loader),
                     D_loss.item(), img_D_loss.item(), txt_D_loss.item(),
-                    G_loss.item(), img_recon_loss.item(),
-                    txt_recon_loss.item(), img_cycle_loss.item(),
+                    img_cycle_loss.item(),
                     txt_cycle_loss.item()))
-                self.writer.add_scalar(
-                    'Train/G_loss', G_loss.item(),
-                    step + len(self.train_loader) * epoch)
                 self.writer.add_scalar(
                     'Train/D_loss', D_loss.item(),
                     step + len(self.train_loader) * epoch)
@@ -369,13 +311,12 @@ class MultimodalGAN:
             modality = None
             for step, (ids, feats, modalitys, labels) in enumerate(dataloader):
                 batch_size = feats.shape[0]
-                #feats, modalitys = feats.cuda(), modalitys.cuda()
+                feats, modalitys = feats.to(DEVICE), modalitys.to(DEVICE)
                 img_idx = modalitys.view(-1) == 0
                 txt_idx = modalitys.view(-1) == 1
                 imgs_recon, imgs_latent = self.imgAE(feats[img_idx])
                 txts_recon, txts_latent = self.txtAE(feats[txt_idx])
-                #latent_code = torch.zeros(batch_size, self.latent_dim).cuda()
-                latent_code = torch.zeros(batch_size, self.latent_dim)
+                latent_code = torch.zeros(batch_size, self.latent_dim).to(DEVICE)
                 print(">>>latent_code: ", latent_code.shape)
                 if unify_modal == 'img':
                     txt2img_recon, _ = self.txt2img(txts_latent)
@@ -417,15 +358,36 @@ class MultimodalGAN:
         print(">>>Test data entry: ", test_data[0])
         print("Input length: ", len(test_data[0][1]))
 
-    def _build_pretrain_dataloader(self, modal='img'):
+    def _build_dataloader_masterpraktikum(self):
         kwargs = {'num_workers': self.args.n_cpu, 'pin_memory': True}
-        train_modal_data = SFeatDataSet(
-            file_mat=os.path.join(self.args.data_dir,
-                                  'train_{}.mat'.format(modal)))
-        train_modal_loader = DataLoader(dataset=train_modal_data,
-                                        batch_size=self.args.batch_size,
-                                        shuffle=True, **kwargs)
-        return train_modal_loader
+
+        img_path = 'data/neu'
+        h5ad_path = 'data/adata.h5ad'
+
+        # img_data as file paths
+        imgs = os.listdir(img_path)
+        imgs = ['data/neu/' + i for i in imgs]
+        print(imgs)
+        # cell_data as h5ad
+        anndata = ad.read_h5ad(h5ad_path)
+
+        # generate embeddings
+        img_emb = self.imgAE.forward(imgs)
+        cell_emb = self.txtAE.forward(anndata)
+
+        train_data = CustomDataset(img_emb=img_emb, cell_emb=cell_emb)
+
+        self.train_loader = DataLoader(dataset=train_data,
+                                       batch_size=self.args.batch_size,
+                                       shuffle=True, **kwargs)
+        self.train_loader_ordered = DataLoader(dataset=train_data,
+                                               batch_size=self.args.batch_size,
+                                               shuffle=False, **kwargs)
+
+        test_data = CustomDataset(img_emb=img_emb, cell_emb=cell_emb)
+        self.test_loader = DataLoader(dataset=test_data,
+                                      batch_size=self.args.batch_size,
+                                      shuffle=False, **kwargs)
 
     def set_model_status(self, training=True):
         if training:
@@ -444,12 +406,12 @@ class MultimodalGAN:
             self.D_txt.eval()
 
     def to_cuda(self):
-        self.imgAE.cuda()
-        self.txtAE.cuda()
-        self.img2txt.cuda()
-        self.txt2img.cuda()
-        self.D_img.cuda()
-        self.D_txt.cuda()
+        self.imgAE.to(DEVICE)
+        self.txtAE.to(DEVICE)
+        self.img2txt.to(DEVICE)
+        self.txt2img.to(DEVICE)
+        self.D_img.to(DEVICE)
+        self.D_txt.to(DEVICE)
 
     def save_cpt(self, epoch):
         state_dict = {'epoch': epoch,
@@ -463,23 +425,6 @@ class MultimodalGAN:
                       'optimizer_D': self.optimizer_D.state_dict()
                       }
         cptname = '{}_checkpt_{}.pkl'.format(self.args.dataset, epoch)
-        cptpath = os.path.join(self.args.cpt_dir, cptname)
-        self.logger.info("> Save checkpoint '{}'".format(cptpath))
-        torch.save(state_dict, cptpath)
-
-    def save_pretrain_cpt(self, epoch, modal='img'):
-        print(">>>save_pretrain_cpt")
-        if modal == 'img':
-            AE = self.imgAE
-            optimizer = self.optimizer_G1
-        elif modal == 'txt':
-            AE = self.txtAE
-            optimizer = self.optimizer_G2
-        state_dict = {'epoch': epoch,
-                      'AE_state_dict': AE.state_dict(),
-                      'optimizer': optimizer.state_dict()}
-        cptname = '{}_{}_pretrain_checkpt_{}.pkl'.format(
-            self.args.dataset, modal, epoch)
         cptpath = os.path.join(self.args.cpt_dir, cptname)
         self.logger.info("> Save checkpoint '{}'".format(cptpath))
         torch.save(state_dict, cptpath)
@@ -498,24 +443,6 @@ class MultimodalGAN:
             self.optimizer_G.load_state_dict(dicts['optimizer_G'])
             self.optimizer_D.load_state_dict(dicts['optimizer_D'])
             # self.scheduler.load_state_dict(dicts['scheduler'])
-        else:
-            self.logger.error("> No checkpoint found at '{}'".format(cptpath))
-
-    def load_pretrain_cpt(self, cptpath, modal='img', only_weight=False):
-        print(">>>load_pretrain_cpt")
-        if os.path.isfile(cptpath):
-            self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            if modal == 'img':
-                AE = self.imgAE
-                optimizer = self.optimizer_G1
-            elif modal == 'txt':
-                AE = self.txtAE
-                optimizer = self.optimizer_G2
-            dicts = torch.load(cptpath)
-            AE.load_state_dict(dicts['AE_state_dict'])
-            if not only_weight:
-                self.epoch = dicts['epoch']
-                optimizer.load_state_dict(dicts['optimizer'])
         else:
             self.logger.error("> No checkpoint found at '{}'".format(cptpath))
 

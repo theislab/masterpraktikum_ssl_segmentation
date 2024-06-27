@@ -73,21 +73,20 @@ torch.backends.cudnn.benchmark = False
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 if __name__ == '__main__':
-    print(">>> START")
     config = dict()
     if args.dataset == 'wikipedia':
         config['img_input_dim'] = 2048
         config['txt_input_dim'] = 2048
         config['n_clusters'] = 10
-        # config['img_hiddens'] = [1024, 256, 128]
-        # config['txt_hiddens'] = [1024, 256, 128]
-        config['img_hiddens'] = [1024, 197, 768]
-        config['txt_hiddens'] = [1024, 48082, 512]
+        config['img_hiddens'] = [512]
+        config['txt_hiddens'] = [512]
 
         #config['img2txt_hiddens'] = [128, 256, 128]
         #config['txt2img_hiddens'] = [128, 256, 128]
-        config['img2txt_hiddens'] = [768, 256, 512]
-        config['txt2img_hiddens'] = [512, 256, 768]
+
+        # reduce img_hiddens from 768 -> 512 with pca
+        config['img2txt_hiddens'] = [512, 256, 512]
+        config['txt2img_hiddens'] = [512, 256, 512]
         # if the data include corresponding filename for each sample feature
         config['has_filename'] = True
     config['batchnorm'] = True
