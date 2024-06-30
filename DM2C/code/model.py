@@ -2,16 +2,20 @@
 # python3 train.py --lr_g 1e-4 --lr_d 5e-5 --gan_type wasserstein --n_epochs 250 --weight_decay 0 --lamda3 0.5 --lamda1 1 --lr_c 5e-4
 from __future__ import print_function, absolute_import, division
 
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModel
+import anndata
+from CellPLM_repo.CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 import logging
 import os
 import itertools
-import pdb
-
+from torch import nn
+import torch.nn.functional as F
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-from utils import *#, SFeatDataSet
+from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA_on_modal
 
 logging.basicConfig(level=logging.INFO,
                     filename='output.log',
@@ -55,17 +59,17 @@ class DeepAE(nn.Module):
         return output, latent
 
 class CellPLM_model():
-    def __init__(self, model, device='cpu'):
+    def __init__(self, model:str, device:str='cpu'):
         self.pipeline = CellEmbeddingPipeline(pretrain_prefix=model,  # Specify the pretrain checkpoint to load
                                          pretrain_directory='../../../models/cellplm/')
         self.device = device
-    def calc_embed(self, data):
+    def calc_embed(self, data:anndata.AnnData):
         embedding = self.pipeline.predict(data,  # An AnnData object
                                      device=self.device)  # Specify a gpu or cpu for model inference
         return embedding
 
 class Vision_Trans():
-        def __init__(self, hugging_face):
+        def __init__(self, hugging_face:str):
             self.processor = AutoImageProcessor.from_pretrained(hugging_face)
             self.model = AutoModel.from_pretrained(hugging_face)
 
@@ -73,8 +77,9 @@ class Vision_Trans():
             def infer(img):
                 img = Image.open(img).convert("RGB")
                 inputs = self.processor(img, return_tensors="pt")  # preprocesses for correct input format
-                outputs = self.model(**inputs)
-                return outputs.pooler_output.detach().squeeze(dim=0)
+                with torch.no_grad():
+                    outputs = self.model(**inputs)
+                return outputs.pooler_output.squeeze(dim=0)
 
             embeds=[infer(image) for image in imgs]
             return torch.stack(embeds)
@@ -97,9 +102,9 @@ class MultimodalGAN:
 
         # Generator
         # adjusted for the masterpraktikum
-        self.latent_dim_img = self.config['img_input_dim']
-        self.latent_dim_txt = self.config['txt_input_dim']
-        self.latent_dim = min(self.config['img_input_dim'], self.config['txt_input_dim'])
+        self.latent_dim_img = self.config['img_latent_dim']
+        self.latent_dim_txt = self.config['txt_latent_dim']
+        self.latent_dim = min(self.config['img_latent_dim'], self.config['txt_latent_dim'])
 
         # self._build_dataloader()
         self._build_masterpraktikum_dataloader()
@@ -248,7 +253,7 @@ class MultimodalGAN:
         img_dataset = img_Dataset(self.args.img_path)
 
         # we need to embed the h5ad data first so we can input them into the dataloader
-        h5ad_embed = torch.stack([embed for embed in self.cell_plm.calc_embed(h5ad_dataset.data)])
+        h5ad_embed = self.cell_plm.calc_embed(h5ad_dataset.data)
         # same with images -- embed first
         img_loader = DataLoader(dataset = img_dataset, # image loader so that not all images are read into memory for embedding calculation
                                 batch_size= self.args.batch_size,
@@ -258,9 +263,9 @@ class MultimodalGAN:
             img_embed.extend(self.vis_trans.calc_embed(load))
         img_embed = torch.stack(img_embed)
         # use pca to get same dimension:
-        if self.config['img_input_dim'] != self.config['txt_input_dim']:  # only in case that the dim are not the same
+        if self.config['img_latent_dim'] != self.config['txt_latent_dim']:  # only in case that the dim are not the same
             print("Running PCA since dimensions don't match")
-            if self.latent_dim == self.config['img_input_dim']: # if the min is the image dim
+            if self.latent_dim == self.config['img_latent_dim']: # if the min is the image dim
                 h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
             else:
                 img_embed = run_PCA_on_modal(img_embed, self.latent_dim)
@@ -281,7 +286,7 @@ class MultimodalGAN:
     def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions
         self.set_model_status(training=False)
         with torch.no_grad():
-            latent = None
+            return_latent = None
             for step, (txt_embed, img_embed) in enumerate(dataloader):
                 if unify_modal == 'img':
                     latent, _ = self.txt2img(txt_embed)
@@ -289,7 +294,9 @@ class MultimodalGAN:
                     latent, _ = self.img2txt(img_embed)
                 else:
                     latent = (txt_embed, img_embed)
-            return latent.cpu().numpy()
+                return_latent = latent if step == 0 else torch.cat(
+                    [return_latent, latent], 0)
+            return return_latent.cpu().numpy()
 
 
     # no pretraining needed -- no pretrain dataloader needed
@@ -340,6 +347,8 @@ class MultimodalGAN:
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:
             self.logger.error("> No checkpoint found at '{}'".format(cptpath))
+
+
     def set_writer(self):
         self.logger.info('> Create writer at \'{}\''.format(self.args.log_dir))
         self.writer = SummaryWriter(self.args.log_dir)

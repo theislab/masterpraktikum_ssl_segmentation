@@ -1,26 +1,15 @@
 from __future__ import print_function, absolute_import, division
 
 import os
-import pickle
-import pdb
 import anndata as ad
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import scipy.io as sio
-from PIL import Image
 from torch.utils.data import Dataset
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from transformers import AutoImageProcessor, AutoModel
 from sklearn import metrics
 import math
 #from sklearn.metrics.cluster.supervised import contingency_matrix
 #from munkres import Munkres
-from CellPLM.utils import set_seed
-from CellPLM_repo.CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 class MFeatDataSet(Dataset):
     '''Mixed-modal feature'''
 
@@ -70,7 +59,7 @@ class h5ad_Dataset(Dataset):
 class img_Dataset(Dataset):
     def __init__(self, img_path):
         names = os.listdir(img_path)
-        self.imgs = [img_path+name for name in names]
+        self.imgs = [os.path.join(img_path,name) for name in names]
     def __getitem__(self, index):
         return self.imgs[index]
     def __len__(self):
@@ -78,24 +67,30 @@ class img_Dataset(Dataset):
 
 class Custom_Dataloader():
     def __init__(self, dataset, modal, batch_size=32, shuffle=True):
-        self.dataset, self.modal, self.batch_size, self.shuffle = dataset, modal, batch_size, shuffle
-    def __iter__(self):
-        indices = np.arange(len(self.dataset))
+        self.dataset, self.modal, self.shuffle = dataset, modal, shuffle
+        self.batch_size, self.txt_idx, self.img_idx = self._get_indices(batch_size) # update batch_size and get indices
+
+    def _get_indices(self, batch_size):
+        # get indices for both modalities
+        img_idx = np.where(np.array(self.modal) == 1)[0]
+        txt_idx = np.where(np.array(self.modal) == 0)[0]
         if self.shuffle:
-            indices = np.random.permutation(len(self.dataset))
-        batches = []
+            txt_idx = np.random.permutation(txt_idx)
+            img_idx = np.random.permutation(img_idx)
+        # get the batch size depending on embeddings
+        updated_batch_size = min(int(batch_size/2), len(txt_idx), len(img_idx))
+        return updated_batch_size*2, txt_idx, img_idx
+
+    def __iter__(self):
+        indices = min(self.batch_size, len(self.img_idx), len(self.txt_idx))
         txt_batch, img_batch = [], []
-        for index in indices:  # iterate over indices using the iterator
-            if self.modal[index] == 0:
-                txt_batch.append(self.dataset[index])
-            else: img_batch.append(self.dataset[index])
+        for index in range(indices):  # iterate over indices using the iterator
+            txt_batch.append(self.dataset[self.txt_idx[index]])
+            img_batch.append(self.dataset[self.img_idx[index]])
             if len(txt_batch) + len(img_batch) == self.batch_size:
-                batches.append([txt_batch, img_batch ])
                 yield torch.stack(txt_batch), torch.stack(img_batch)
                 txt_batch, img_batch = [], []
-        if len(txt_batch) > 0 and len(img_batch) > 0: # return last batch only if both modalities have it
-            batches.append([txt_batch, img_batch])
-            yield torch.stack(txt_batch), torch.stack(img_batch)
+
     def __len__(self):
         dataset_length = len(self.dataset)
         batch_number = dataset_length / self.batch_size

@@ -14,7 +14,7 @@ METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=6)
-parser.add_argument("--batch_size", type=int, default=128)  # 128
+parser.add_argument("--batch_size", type=int, default=4)  # 128
 parser.add_argument("--lr_g", type=float, default=1e-4,  # 1e-4
                     help="adam: learning rate for G")
 parser.add_argument("--lr_d", type=float, default=1e-4,  # 1e-4
@@ -99,8 +99,8 @@ if __name__ == '__main__':
     # addind a dataset for masterpraktikum
     elif args.dataset == 'masterpraktikum':
         # no need for AE
-        config['img_input_dim'] = 768
-        config['txt_input_dim'] = 512
+        config['img_latent_dim'] = 768
+        config['txt_latent_dim'] = 512
         # config['img_hiddens'] = [512, 256, 128]
         # config['txt_hiddens'] = [512, 128]
         # should be between the real dimenstions
@@ -129,9 +129,9 @@ if __name__ == '__main__':
     for epoch in range(args.n_epochs):
         print(epoch)
         model.train(epoch)
-        train_embedding = model.embedding(
-            model.train_loader_ordered, unify_modal='txt')
-        print(train_embedding)
+    train_embedding = model.embedding(
+        model.train_loader_ordered, unify_modal='txt')
+    print(train_embedding)
         # test_embedding, test_target, test_modality = model.embedding( no test set as of now
         #    model.test_loader, unify_modal='img')
         # no need for kmeans
