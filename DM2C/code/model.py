@@ -267,8 +267,10 @@ class MultimodalGAN:
             print("Running PCA since dimensions don't match")
             if self.latent_dim == self.config['img_latent_dim']: # if the min is the image dim
                 h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
+                print("adjusting gene expression data to image dimension")
             else:
                 img_embed = run_PCA_on_modal(img_embed, self.latent_dim)
+                print("adjusting image data to gene expression dimension")
 
         # add 0 / 1 so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]

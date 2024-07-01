@@ -7,6 +7,8 @@ import numpy as np
 import scipy.io as sio
 from torch.utils.data import Dataset
 from sklearn import metrics
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import math
 #from sklearn.metrics.cluster.supervised import contingency_matrix
 #from munkres import Munkres
@@ -82,7 +84,7 @@ class Custom_Dataloader():
         return updated_batch_size*2, txt_idx, img_idx
 
     def __iter__(self):
-        indices = min(self.batch_size, len(self.img_idx), len(self.txt_idx))
+        indices = min(len(self.img_idx), len(self.txt_idx))
         txt_batch, img_batch = [], []
         for index in range(indices):  # iterate over indices using the iterator
             txt_batch.append(self.dataset[self.txt_idx[index]])
@@ -90,6 +92,8 @@ class Custom_Dataloader():
             if len(txt_batch) + len(img_batch) == self.batch_size:
                 yield torch.stack(txt_batch), torch.stack(img_batch)
                 txt_batch, img_batch = [], []
+        if len(txt_batch) > 0 and len(img_batch) > 0 and len(txt_batch) == len(img_batch): # returning last not full batch
+            yield torch.stack(txt_batch), torch.stack(img_batch)
 
     def __len__(self):
         dataset_length = len(self.dataset)
@@ -99,13 +103,14 @@ class Custom_Dataloader():
 
 def run_PCA_on_modal(x, n_feat):
     ''' have to wait for bigger dataset with this
-    x = x.detach().numpy()
-    x = StandardScaler().fit_transform(x)
-    pca = PCA(n_components=n_feat)
-    x = pca.fit_transform(x)
-    return torch.tensor(x)
-    '''
-    return x[:, :n_feat] # for no only take the first 512 to match the dimensions
+        x = x.detach().numpy()
+        x = StandardScaler().fit_transform(x)
+        pca = PCA(n_components=n_feat)
+        x = pca.fit_transform(x)
+        return torch.tensor(x)
+        '''
+    return x[:, :n_feat]  # for no only take the first 512 to match the dimensions
+
 
 def best_map(L1, L2):
     # L1 should be the ground-truth labels and L2 should be the clustering labels we got

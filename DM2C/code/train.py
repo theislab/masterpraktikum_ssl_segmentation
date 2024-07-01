@@ -4,6 +4,7 @@ import os
 import time
 import argparse
 
+import pandas as pd
 import scipy.io as sio
 import torch
 from sklearn.cluster import KMeans
@@ -11,7 +12,6 @@ from sklearn.cluster import KMeans
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=6)
 parser.add_argument("--batch_size", type=int, default=4)  # 128
@@ -55,11 +55,11 @@ parser.add_argument('--cpt_dir', type=str, default='cpt/',
                     help="dir for saved checkpoint")
 parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help="path to cell plm model ") # "path to load txt AE checkpoint" changed to txt embeddings instead of AE checkpoint
-parser.add_argument('--h5ad_data', type=str, default='../../../masterpraktikum_data/h5ad/subset_dataset.h5ad',
+parser.add_argument('--h5ad_data', type=str, default='data/Toy/concatenated.h5ad',
                     help="path to trascriptional data")
 parser.add_argument('--hugging_face', type=str, default="google/vit-base-patch16-224",
                     help="path to visual transformer") # "path to load img AE checkpoint" changed to txt embeddings instead of AE checkpoint
-parser.add_argument('--img_path', type=str, default="../../../masterpraktikum_data/imgs/",
+parser.add_argument('--img_path', type=str, default="data/Toy/img/",
                     help="path to image folder")
 parser.add_argument('--dm2c_cptpath', type=str, default='cpt/',
                     help="path to load dm2c checkpoint")
