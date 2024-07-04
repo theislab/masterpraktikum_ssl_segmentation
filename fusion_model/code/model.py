@@ -4,6 +4,7 @@ from __future__ import print_function, absolute_import, division
 
 import itertools
 import logging
+from pathlib import Path
 
 import pandas as pd
 import torch.optim as optim
@@ -29,38 +30,34 @@ info_string1 = ('Epoch: %3d/%3d|Batch: %2d/%2d||D_loss: %.4f|D1_loss: %.4f|'
 class ViT_AE():
     """Vision Transformer Autoencoder"""
 
-    def __init__(self):
-        self.processor = ViTImageProcessor.from_pretrained('google/vit-base-patch16-224')
+    def __init__(self, model_path):
+        self.processor = ViTImageProcessor.from_pretrained(model_path)
         self.model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', output_hidden_states=True)
 
         # self.encoder = model.vit.encoder
 
     def forward(self, x):
         print("ViT_AE forward")
-        print(x)
 
         pca_latent = PCA(n_components=512)
         latents = []
 
         for img in x:
+            img = Path(img)
             image = Image.open(img)
-            input = self.processor(images=image, return_tensors="pt")
-            output = self.model(**input)
+            img_input = self.processor(images=image, return_tensors="pt")
+            output = self.model(**img_input)
             hidden_states = output.hidden_states
-            print("Hidden states: ", hidden_states[-1].shape)
-
             latent = hidden_states[-1][0][0]
-            print("Hidden states2: ", hidden_states[-1][0].shape)
-            print("Hidden states3: ", hidden_states[-1][0][0].shape)
-            # print(latent)
-            # use pca to get same embedding shape as the cell embedding
             latents.append(latent)
         latents = pd.DataFrame(latents)
+        print(">>> Loading img embedding done")
         print(latents.shape)
+        # use pca to get same embedding shape as the cell embedding
         # latents = latents.transpose()
         # print(latents.shape)
         principal_components_latents = pca_latent.fit_transform(latents)
-
+        print(">>> Loading img embedding and PCA done")
         return principal_components_latents
 
 
@@ -127,10 +124,10 @@ class MultimodalGAN:
             'Inconsistent latent dim!'
 
         # Visual transformer embedding
-        self.imgAE = ViT_AE()
+        self.imgAE = ViT_AE(model_path=self.args.vit_path)
 
         # CellPLM embedding
-        self.txtAE = CellPLM_AE(model='20231027_85M')
+        self.txtAE = CellPLM_AE(model=self.args.cellPLM_path)
 
         # self._build_dataloader()
         self._build_dataloader_masterpraktikum()
@@ -194,8 +191,7 @@ class MultimodalGAN:
 
     def train(self, epoch):
         # self.set_model_status(training=True)
-        print("train_loader: ", self.train_loader)
-        print("train_loader.dataset: ", self.train_loader.dataset)
+        print(">>> Train")
 
         # for step, (ids, feats, modalitys, labels) in enumerate(self.train_loader):
 
@@ -337,39 +333,14 @@ class MultimodalGAN:
                     [modality, modalitys], 0)
             return latent.cpu().numpy(), target.cpu().numpy(), modality.cpu().numpy()
 
-    def _build_dataloader(self):
-        kwargs = {'num_workers': self.args.n_cpu, 'pin_memory': True}
-        train_data = MFeatDataSet(
-            file_mat=os.path.join(self.args.data_dir, 'train_file.mat'),
-            has_filename=self.config['has_filename'])
-        self.train_loader = DataLoader(dataset=train_data,
-                                       batch_size=self.args.batch_size,
-                                       shuffle=True, **kwargs)
-        self.train_loader_ordered = DataLoader(dataset=train_data,
-                                               batch_size=self.args.batch_size,
-                                               shuffle=False, **kwargs)
-        test_data = MFeatDataSet(
-            file_mat=os.path.join(self.args.data_dir, 'test_file.mat'),
-            has_filename=self.config['has_filename'])
-        self.test_loader = DataLoader(dataset=test_data,
-                                      batch_size=self.args.batch_size,
-                                      shuffle=False, **kwargs)
-        print(test_data)
-        print(">>>Test data entry: ", test_data[0])
-        print("Input length: ", len(test_data[0][1]))
-
     def _build_dataloader_masterpraktikum(self):
         kwargs = {'num_workers': self.args.n_cpu, 'pin_memory': True}
 
-        img_path = 'data/neu'
-        h5ad_path = 'data/adata.h5ad'
-
         # img_data as file paths
-        imgs = os.listdir(img_path)
-        imgs = ['data/neu/' + i for i in imgs]
-        print(imgs)
+        imgs = os.listdir(self.args.img_path)
+        imgs = [os.path.join(self.args.img_path, i) for i in imgs]
         # cell_data as h5ad
-        anndata = ad.read_h5ad(h5ad_path)
+        anndata = ad.read_h5ad(self.args.h5ad_path)
 
         # generate embeddings
         img_emb = self.imgAE.forward(imgs)

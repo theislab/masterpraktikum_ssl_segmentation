@@ -1,15 +1,15 @@
 from __future__ import print_function, absolute_import, division
 
+import argparse
 import os
 import time
-import argparse
 
-import scipy.io as sio
 import torch
 from sklearn.cluster import KMeans
 
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
+
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 parser = argparse.ArgumentParser()
@@ -45,11 +45,12 @@ parser.add_argument('--tol', type=int, default=1e-3)
 parser.add_argument('--save_freq', type=int, default=25)
 parser.add_argument('--log_freq', type=int, default=5)
 parser.add_argument('--test_freq', type=int, default=1)
-parser.add_argument("--pretrain", type=str, default='None',
-                    choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
-parser.add_argument("--dataset", type=str, default='wikipedia',
-                    choices=['wikipedia', 'nuswide'])
-parser.add_argument("--data_dir", type=str, default='data/wikipedia/')
+
+parser.add_argument("--img_path", type=str, default='data/')
+parser.add_argument("--h5ad_path", type=str, default='data/')
+parser.add_argument("--vit_path", type=str, default='google/vit-base-patch16-224')
+parser.add_argument("--cellPLM_path", type=str, default='20231027_85M')
+
 parser.add_argument('--log_dir', type=str, default='log/')
 parser.add_argument('--cpt_dir', type=str, default='cpt/',
                     help="dir for saved checkpoint")
@@ -74,28 +75,27 @@ METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 if __name__ == '__main__':
     config = dict()
-    if args.dataset == 'wikipedia':
-        config['img_input_dim'] = 2048
-        config['txt_input_dim'] = 2048
-        config['n_clusters'] = 10
-        config['img_hiddens'] = [512]
-        config['txt_hiddens'] = [512]
+    config['img_input_dim'] = 2048
+    config['txt_input_dim'] = 2048
+    config['n_clusters'] = 10
+    config['img_hiddens'] = [512]
+    config['txt_hiddens'] = [512]
 
-        #config['img2txt_hiddens'] = [128, 256, 128]
-        #config['txt2img_hiddens'] = [128, 256, 128]
+    # config['img2txt_hiddens'] = [128, 256, 128]
+    # config['txt2img_hiddens'] = [128, 256, 128]
 
-        # reduce img_hiddens from 768 -> 512 with pca
-        config['img2txt_hiddens'] = [512, 256, 512]
-        config['txt2img_hiddens'] = [512, 256, 512]
-        # if the data include corresponding filename for each sample feature
-        config['has_filename'] = True
+    # reduce img_hiddens from 768 -> 512 with pca
+    config['img2txt_hiddens'] = [512, 256, 512]
+    config['txt2img_hiddens'] = [512, 256, 512]
+    # if the data include corresponding filename for each sample feature
+    # config['has_filename'] = True
+
     config['batchnorm'] = True
     config['cuda'] = use_cuda
     config['device'] = device
     current_time = time.strftime(
         "%Y-%m-%d-%H-%M-%S", time.localtime(time.time()))
     config['log_file'] = current_time + '.txt'
-
 
     check_dir_exist(args.log_dir)
     check_dir_exist(args.cpt_dir)
@@ -106,42 +106,30 @@ if __name__ == '__main__':
     if use_cuda:
         model.to_cuda()
 
-    # pretrain the autoencoders
-    """
-    if args.pretrain == 'img':
-        model.pretrain('img')
-    elif args.pretrain == 'txt':
-        model.pretrain('txt')
-    elif args.pretrain == 'load_all':
-        model.load_cpt(args.dm2c_cptpath)
-    elif args.pretrain == 'load_ae':
-    """
-    if args.pretrain == 'load_ae':
-        print(">>> Load_ae")
-        model.load_pretrain_cpt(args.img_cptpath, 'img', only_weight=True)
-        model.load_pretrain_cpt(args.txt_cptpath, 'txt', only_weight=True)
+    model.load_pretrain_cpt(args.img_cptpath, 'img', only_weight=True)
+    model.load_pretrain_cpt(args.txt_cptpath, 'txt', only_weight=True)
 
-        for epoch in range(args.n_epochs):
-            model.train(epoch)
-            train_embedding, train_target, train_modality = model.embedding(
-                model.train_loader_ordered, unify_modal='img')
-            test_embedding, test_target, test_modality = model.embedding(
-                model.test_loader, unify_modal='img')
-            kmeans = KMeans(config['n_clusters'], max_iter=1000,
-                            tol=5e-5, n_init=20).fit(train_embedding)
-            train_metrics = calculate_metrics(train_target, kmeans.labels_)
-            print(test_embedding.shape)
-            y_pred = kmeans.predict(test_embedding)
+    for epoch in range(args.n_epochs):
+        model.train(epoch)
+        train_embedding, train_target, train_modality = model.embedding(
+            model.train_loader_ordered, unify_modal='img')
+        test_embedding, test_target, test_modality = model.embedding(
+            model.test_loader, unify_modal='img')
+        kmeans = KMeans(config['n_clusters'], max_iter=1000,
+                        tol=5e-5, n_init=20).fit(train_embedding)
+        train_metrics = calculate_metrics(train_target, kmeans.labels_)
+        print(test_embedding.shape)
+        y_pred = kmeans.predict(test_embedding)
 
-            test_metrics = calculate_metrics(test_target, y_pred)
-            print('>Train', METRIC_PRINT.format(*train_metrics))
-            print('>Test ', METRIC_PRINT.format(*test_metrics))
-            # sio.savemat('result/result_{}.mat'.format(epoch),
-            #             {'X_embed_train': train_embedding,
-            #              'y_pred_train': kmeans.predict(train_embedding),
-            #              'y_true_train': train_target,
-            #              'modal_train': train_modality,
-            #              'X_embed_test': test_embedding,
-            #              'y_pred_test': y_pred,
-            #              'y_true_test': test_target,
-            #              'modal_test': test_modality})
+        test_metrics = calculate_metrics(test_target, y_pred)
+        print('>Train', METRIC_PRINT.format(*train_metrics))
+        print('>Test ', METRIC_PRINT.format(*test_metrics))
+        # sio.savemat('result/result_{}.mat'.format(epoch),
+        #             {'X_embed_train': train_embedding,
+        #              'y_pred_train': kmeans.predict(train_embedding),
+        #              'y_true_train': train_target,
+        #              'modal_train': train_modality,
+        #              'X_embed_test': test_embedding,
+        #              'y_pred_test': y_pred,
+        #              'y_true_test': test_target,
+        #              'modal_test': test_modality})
