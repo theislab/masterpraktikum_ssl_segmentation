@@ -11,8 +11,9 @@ import torch.optim as optim
 from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
-from transformers import ViTForImageClassification
+from transformers import ViTForImageClassification, ViTImageProcessor
 
+import anndata as ad
 from utils import *
 
 use_cuda = torch.cuda.is_available()
@@ -51,13 +52,9 @@ class ViT_AE():
             latent = hidden_states[-1][0][0]
             latents.append(latent)
         latents = pd.DataFrame(latents)
-        print(">>> Loading img embedding done")
-        print(latents.shape)
         # use pca to get same embedding shape as the cell embedding
-        # latents = latents.transpose()
-        # print(latents.shape)
         principal_components_latents = pca_latent.fit_transform(latents)
-        print(">>> Loading img embedding and PCA done")
+        print(">>> Image embedding shape after PCA: ", principal_components_latents.shape)
         return principal_components_latents
 
 
@@ -71,6 +68,9 @@ class CellPLM_AE():
     def forward(self, x):
         latent = self.encoder.predict(x,  # An AnnData object
                                       device=DEVICE)  # Specify a gpu or cpu for model inference
+        latent = latent.cpu().numpy()
+        print(">>> Cell embedding shape: ", latent.shape)
+        print(type(latent))
         return latent
 
 
@@ -78,7 +78,6 @@ class DeepAE(nn.Module):
     """DeepAE: FC AutoEncoder"""
 
     def __init__(self, input_dim=1, hiddens=[1], batchnorm=False):
-        print(">>>init DeepAE")
         super(DeepAE, self).__init__()
         self.depth = len(hiddens)
         self.channels = [input_dim] + hiddens  # [5, 3, 3]
@@ -134,8 +133,6 @@ class MultimodalGAN:
 
         # Generator
         self.latent_dim = config['img_hiddens'][-1]
-        print("latent_dim: ", self.latent_dim)
-        # Autoencoders imgAE and txtAE
 
         # Generators img2txt and txt2img
         self.img2txt = DeepAE(input_dim=self.latent_dim,
@@ -194,11 +191,12 @@ class MultimodalGAN:
         print(">>> Train")
 
         # for step, (ids, feats, modalitys, labels) in enumerate(self.train_loader):
+        # ids, feats, modalitys, labels = \
+        # ids.to(DEVICE), feats.to(DEVICE), modalitys.to(DEVICE), labels.to(DEVICE)
+        for step, (ids, feats, modalitys) in enumerate(self.train_loader):
 
-        for step, (txt_embed, img_embed) in enumerate(self.train_loader):
-
-            ids, feats, modalitys, labels = \
-                ids.to(DEVICE), feats.to(DEVICE), modalitys.to(DEVICE), labels.to(DEVICE)
+            ids, feats, modalitys = \
+                ids.to(DEVICE), feats.to(DEVICE), modalitys.to(DEVICE)
 
             modalitys = modalitys.view(-1)
 
@@ -208,18 +206,18 @@ class MultimodalGAN:
             # -----------------
             #  Train Generator
             # -----------------
-
             self.optimizer_G.zero_grad()
 
-            img_feats = feats[img_idx]
-            print(">img_feats ", img_feats.shape)
-            txt_feats = feats[txt_idx]
-            print(">txt_feats ", txt_feats.shape)
-            img_batch_size = img_feats.size(0)
-            txt_batch_size = txt_feats.size(0)
+            imgs_latent = feats[img_idx]
+            txts_latent = feats[txt_idx]
 
-            imgs_latent = self.imgAE.forward(img_feats[1])
-            txts_latent = self.txtAE.forward(txt_feats)
+            img_batch_size = imgs_latent.size(0)
+            txt_batch_size = txts_latent.size(0)
+
+            # imgs_latent = imgs_latent.to(torch.float)
+            print("imgs_latent type: ", type(imgs_latent))
+            print("imgs_latent shape: ", imgs_latent.shape)
+
             img2txt_recon, _ = self.img2txt(imgs_latent)
             img2txt_recon, x = self.img2txt(imgs_latent)
             print(x.shape)
@@ -338,7 +336,10 @@ class MultimodalGAN:
 
         # img_data as file paths
         imgs = os.listdir(self.args.img_path)
+        imgs2 = os.listdir("/p/project1/hai_pathology/subgroup_merel/image_data/CBFB_MYH11/AQK")
         imgs = [os.path.join(self.args.img_path, i) for i in imgs]
+        imgs2 = [os.path.join("/p/project1/hai_pathology/subgroup_merel/image_data/CBFB_MYH11/AQK", i) for i in imgs2]
+        imgs = imgs + imgs2
         # cell_data as h5ad
         anndata = ad.read_h5ad(self.args.h5ad_path)
 

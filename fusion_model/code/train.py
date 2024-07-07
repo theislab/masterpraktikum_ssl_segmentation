@@ -75,20 +75,13 @@ METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 if __name__ == '__main__':
     config = dict()
-    config['img_input_dim'] = 2048
-    config['txt_input_dim'] = 2048
     config['n_clusters'] = 10
     config['img_hiddens'] = [512]
     config['txt_hiddens'] = [512]
 
-    # config['img2txt_hiddens'] = [128, 256, 128]
-    # config['txt2img_hiddens'] = [128, 256, 128]
-
     # reduce img_hiddens from 768 -> 512 with pca
     config['img2txt_hiddens'] = [512, 256, 512]
     config['txt2img_hiddens'] = [512, 256, 512]
-    # if the data include corresponding filename for each sample feature
-    # config['has_filename'] = True
 
     config['batchnorm'] = True
     config['cuda'] = use_cuda
@@ -105,9 +98,6 @@ if __name__ == '__main__':
     model = MultimodalGAN(args, config)
     if use_cuda:
         model.to_cuda()
-
-    model.load_pretrain_cpt(args.img_cptpath, 'img', only_weight=True)
-    model.load_pretrain_cpt(args.txt_cptpath, 'txt', only_weight=True)
 
     for epoch in range(args.n_epochs):
         model.train(epoch)

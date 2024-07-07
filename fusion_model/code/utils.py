@@ -48,18 +48,18 @@ class MFeatDataSet(Dataset):
 
 class CustomDataset(Dataset):
     def __init__(self, img_emb, cell_emb):
-        self.data = img_emb + cell_emb
+        self.data = np.concatenate((img_emb, cell_emb)).astype(float)
         self.modalities = [0] * len(img_emb) + [1] * len(cell_emb)
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.modalities)
 
     def __getitem__(self, idx):
         # returns the tensor with data and corresponding label in a tuple
         data_point = self.data[idx]
         modality_label = self.modalities[idx]
 
-        return data_point, modality_label
+        return np.float32(idx), data_point, modality_label
 
 
 def best_map(L1, L2):
