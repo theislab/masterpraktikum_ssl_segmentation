@@ -1,0 +1,38 @@
+2024/06/30 13:56:05: model [DEBUG] All settings used:
+2024/06/30 13:56:05: model [DEBUG] b1: 0.5
+2024/06/30 13:56:05: model [DEBUG] b2: 0.999
+2024/06/30 13:56:05: model [DEBUG] batch_size: 128
+2024/06/30 13:56:05: model [DEBUG] cellplm_model: 20230926_85M
+2024/06/30 13:56:05: model [DEBUG] clip_value: 0.05
+2024/06/30 13:56:05: model [DEBUG] cpt_dir: cpt/2024-06-30-13-56-05
+2024/06/30 13:56:05: model [DEBUG] data_dir: data/wikipedia/
+2024/06/30 13:56:05: model [DEBUG] dataset: masterpraktikum
+2024/06/30 13:56:05: model [DEBUG] dm2c_cptpath: cpt/
+2024/06/30 13:56:05: model [DEBUG] gan_type: naive
+2024/06/30 13:56:05: model [DEBUG] h5ad_data: ../../../masterpraktikum_data/h5ad/subset_dataset.h5ad
+2024/06/30 13:56:05: model [DEBUG] hugging_face: google/vit-base-patch16-224
+2024/06/30 13:56:05: model [DEBUG] img_path: ../../../masterpraktikum_data/imgs/
+2024/06/30 13:56:05: model [DEBUG] lamda1: 1.0
+2024/06/30 13:56:05: model [DEBUG] lamda3: 1.0
+2024/06/30 13:56:05: model [DEBUG] log_dir: log/
+2024/06/30 13:56:05: model [DEBUG] log_freq: 5
+2024/06/30 13:56:05: model [DEBUG] lr_d: 0.0001
+2024/06/30 13:56:05: model [DEBUG] lr_g: 0.0001
+2024/06/30 13:56:05: model [DEBUG] n_cpu: 8
+2024/06/30 13:56:05: model [DEBUG] n_epochs: 6
+2024/06/30 13:56:05: model [DEBUG] pretrain: None
+2024/06/30 13:56:05: model [DEBUG] save_freq: 25
+2024/06/30 13:56:05: model [DEBUG] seed: 2018
+2024/06/30 13:56:05: model [DEBUG] test_freq: 1
+2024/06/30 13:56:05: model [DEBUG] tol: 0.001
+2024/06/30 13:56:05: model [DEBUG] update_d_freq: 5
+2024/06/30 13:56:05: model [DEBUG] update_p_freq: 10
+2024/06/30 13:56:05: model [DEBUG] weight_decay: 0.0001
+2024/06/30 13:56:05: model [DEBUG] batchnorm: True
+2024/06/30 13:56:05: model [DEBUG] cuda: False
+2024/06/30 13:56:05: model [DEBUG] device: cpu
+2024/06/30 13:56:05: model [DEBUG] img2txt_hiddens: [512, 512]
+2024/06/30 13:56:05: model [DEBUG] img_latent_dim: 768
+2024/06/30 13:56:05: model [DEBUG] log_file: 2024-06-30-13-56-05.txt
+2024/06/30 13:56:05: model [DEBUG] txt2img_hiddens: [512, 512]
+2024/06/30 13:56:05: model [DEBUG] txt_latent_dim: 512
