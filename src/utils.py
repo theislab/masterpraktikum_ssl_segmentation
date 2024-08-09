@@ -25,8 +25,15 @@ class h5ad_Dataset(Dataset):
 
 class img_Dataset(Dataset):
     def __init__(self, img_path):
-        names = os.listdir(img_path)
-        self.imgs = [os.path.join(img_path, name) for name in names]
+        self.imgs = self._get_image_paths(img_path)
+
+    def _get_image_paths(self, root_dir):
+        image_paths = []
+        for root, _, files in os.walk(root_dir):
+            for file in files:
+                if file.endswith(('.jpg', '.jpeg', '.png', '.tif')):  # Add more extensions if needed
+                    image_paths.append(os.path.join(root, file))
+        return image_paths
 
     def __getitem__(self, index):
         return self.imgs[index]
