@@ -43,22 +43,22 @@ parser.add_argument('--tol', type=int, default=1e-3)
 parser.add_argument('--save_freq', type=int, default=25)
 parser.add_argument('--log_freq', type=int, default=5)
 parser.add_argument('--test_freq', type=int, default=1)
-parser.add_argument("--pretrain", type=str, default='None',
+parser.add_argument('--pretrain', type=str, default='None',
                     choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
-parser.add_argument("--dataset", type=str, default='masterpraktikum')
+parser.add_argument('--dataset', type=str, default='masterpraktikum')
 parser.add_argument('--log_dir', type=str, default='../log/')
 parser.add_argument('--cpt_dir', type=str, default='../ckpt/',
-                    help="dir for saved checkpoint")
+                    help='dir for saved checkpoint')
 parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
-                    help="CellPLM ckpt")
-parser.add_argument('--hugging_face', type=str, default="google/vit-base-patch16-224",
-                    help="Hugging Face ViT identifier")
-parser.add_argument('--h5ad_data', type=str, default='data/Toy/concatenated.h5ad',  # TODO
-                    help="path to GEX data")
-parser.add_argument('--img_data', type=str, default="data/Toy/img/",  # TODO
-                    help="path to image data")
+                    help='CellPLM ckpt')
+parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16-224',
+                    help='Hugging Face ViT identifier')
+parser.add_argument('--h5ad_data', type=str, default='../data/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
+                    help='path to GEX data')
+parser.add_argument('--img_data', type=str, default='../data/imgs/',  # change as needed
+                    help='path to image data')
 parser.add_argument('--dm2c_cptpath', type=str, default='../ckpt/',
-                    help="path to load DM2C checkpoint")
+                    help='path to load DM2C checkpoint')
 args = parser.parse_args()
 
 # reproducible
@@ -92,7 +92,8 @@ if __name__ == '__main__':
     os.mkdir(args.cpt_dir)
 
     model = MultimodalGAN(args, config)
-    if torch.cuda.is_available():
+    use_cuda = torch.cuda.is_available()
+    if use_cuda:
         model.to_cuda()
 
     for epoch in range(args.n_epochs):
