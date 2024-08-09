@@ -70,9 +70,10 @@ class DeepAE(nn.Module):
 
 class CellPLM_AE:
     def __init__(self, model: str):
+        ckpt_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
         self.pipeline = CellEmbeddingPipeline(
             pretrain_prefix=model,  # specify the pretrain checkpoint to load
-            pretrain_directory="../ckpt",
+            pretrain_directory=ckpt_directory,
         )
         self.device = DEVICE
 

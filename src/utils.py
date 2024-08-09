@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.metrics.cluster.supervised import contingency_matrix
+from sklearn.metrics.cluster import contingency_matrix
 from munkres import Munkres
 
 
@@ -54,7 +54,7 @@ class Custom_Dataloader:
         return updated_batch_size * 2, txt_idx, img_idx
 
     def __iter__(self):
-        indices = min(len(self.img_idx), len(self.txt_idx))  # TODO
+        indices = min(len(self.img_idx), len(self.txt_idx))
         txt_batch, img_batch = [], []
         for index in range(indices):  # iterate over indices using the iterator
             txt_batch.append(self.dataset[self.txt_idx[index]])

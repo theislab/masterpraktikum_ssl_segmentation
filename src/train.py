@@ -9,7 +9,10 @@ from sklearn.cluster import KMeans
 
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
+
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
+CPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
+LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_epochs", type=int, default=6)
@@ -46,8 +49,8 @@ parser.add_argument('--test_freq', type=int, default=1)
 parser.add_argument('--pretrain', type=str, default='None',
                     choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
 parser.add_argument('--dataset', type=str, default='masterpraktikum')
-parser.add_argument('--log_dir', type=str, default='../log/')
-parser.add_argument('--cpt_dir', type=str, default='../ckpt/',
+parser.add_argument('--log_dir', type=str, default=LOG_DIR)
+parser.add_argument('--cpt_dir', type=str, default=CPT_DIR,
                     help='dir for saved checkpoint')
 parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help='CellPLM ckpt')
