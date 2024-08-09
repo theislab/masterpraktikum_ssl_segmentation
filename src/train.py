@@ -12,6 +12,7 @@ from utils import calculate_metrics, check_dir_exist
 
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 CPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
+DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
@@ -56,15 +57,13 @@ parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help='CellPLM ckpt')
 parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16-224',
                     help='Hugging Face ViT identifier')
-parser.add_argument('--h5ad_data', type=str, default='../data/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
+parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
                     help='path to GEX data')
-parser.add_argument('--img_data', type=str, default='../data/imgs/',  # change as needed
+parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/',  # change as needed
                     help='path to image data')
-parser.add_argument('--dm2c_cptpath', type=str, default='../ckpt/',
-                    help='path to load DM2C checkpoint')
 args = parser.parse_args()
 
-# reproducible
+# reproducibility
 torch.manual_seed(args.seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -96,6 +95,7 @@ if __name__ == '__main__':
 
     model = MultimodalGAN(args, config)
     use_cuda = torch.cuda.is_available()
+    print(f"CUDA is available: {use_cuda}")
     if use_cuda:
         model.to_cuda()
 

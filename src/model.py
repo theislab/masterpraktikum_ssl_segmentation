@@ -307,7 +307,7 @@ class MultimodalGAN:
         img_dataset = img_Dataset(self.args.img_data)
 
         # embed h5ad data
-        h5ad_embed = self.cellplm(h5ad_dataset.data)
+        h5ad_embed = self.cellplm.forward(h5ad_dataset.data)
         print(type(h5ad_embed))
         print(h5ad_embed.shape)
         
@@ -319,7 +319,7 @@ class MultimodalGAN:
         )
         img_embed = []
         for imgs in img_loader:
-            img_embed.extend(self.vit(imgs))
+            img_embed.extend(self.vit.forward(imgs))
         img_embed = torch.stack(img_embed)
         print(type(img_embed))
         print(type(h5ad_embed))
