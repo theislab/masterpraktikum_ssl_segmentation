@@ -42,8 +42,7 @@ class DeepAE(nn.Module):
     def __init__(self, input_dim=1, hiddens=[1], batchnorm=False):
         super(DeepAE, self).__init__()
         self.depth = len(hiddens)
-        self.channels = [input_dim] + hiddens  # [5, 3, 3]
-        # print(self.channels)
+        self.channels = [input_dim] + hiddens
 
         encoder_layers = []
         for i in range(self.depth):
@@ -81,7 +80,7 @@ class CellPLM_AE:
 
     def forward(self, x: anndata.AnnData):
         embedding = self.pipeline.predict(
-            x, device=self.device  # AnnData object  # gpu or cpu
+            x, device=self.device  # x: AnnData object  # device: gpu or cpu
         )
         return embedding
 
@@ -242,7 +241,6 @@ class MultimodalGAN:
             # ---------------------
             #  Train Discriminator
             # ---------------------
-
             if (step + 1) % self.args.update_d_freq == 0:
                 self.optimizer_D.zero_grad()
 
