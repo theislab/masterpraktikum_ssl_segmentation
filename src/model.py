@@ -8,7 +8,8 @@ import itertools
 
 import anndata
 from PIL import Image
-from transformers import ViTForImageClassification, ViTImageProcessor
+from tqdm import tqdm
+from transformers import ViTImageProcessor, ViTForImageClassification
 from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 
 import torch
@@ -29,8 +30,7 @@ logging.basicConfig(
 )
 info_string1 = (
     "Epoch: %3d/%3d|Batch: %2d/%2d||D_loss: %.4f|D1_loss: %.4f|"
-    "D2_loss: %.4f||G_loss: %.4f|R1_loss: %.4f|R2_loss: %.4f|R121_loss: %.4f|"
-    "R212_loss: %.4f"
+    "D2_loss: %.4f||G_loss: %.4f|R121_loss: %.4f|R212_loss: %.4f"
 )
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -70,7 +70,9 @@ class DeepAE(nn.Module):
 
 class CellPLM_AE:
     def __init__(self, model: str):
-        ckpt_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
+        ckpt_directory = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../ckpt")
+        )
         self.pipeline = CellEmbeddingPipeline(
             pretrain_prefix=model,  # specify the pretrain checkpoint to load
             pretrain_directory=ckpt_directory,
@@ -99,7 +101,8 @@ class ViT_AE:
             )  # preprocesses for correct input format
             with torch.no_grad():
                 outputs = self.model(**inputs)
-            return outputs.pooler_output.squeeze(dim=0)
+                hidden_states = outputs.hidden_states
+            return hidden_states[-1][0][0]
 
         embeds = [infer(image) for image in x]
         return torch.stack(embeds)
@@ -122,34 +125,39 @@ class MultimodalGAN:
         self.cellplm = CellPLM_AE(self.args.cellplm_model)
         self.vit = ViT_AE(self.args.hugging_face)
 
-        # Generator
         self.latent_dim_img = self.config["img_latent_dim"]
         self.latent_dim_txt = self.config["txt_latent_dim"]
         self.latent_dim = min(
             self.config["img_latent_dim"], self.config["txt_latent_dim"]
         )
 
+        print("Initializing data loaders...")
         self._build_masterpraktikum_dataloader()
 
+        # Generators
         self.img2txt = DeepAE(
-            input_dim=self.latent_dim,
-            hiddens=config["img2txt_hiddens"],
-            batchnorm=config["batchnorm"],
+            input_dim=min(self.n_components, self.latent_dim),
+            hiddens=self.config["img2txt_hiddens"],
+            batchnorm=self.config["batchnorm"],
         )
         self.txt2img = DeepAE(
-            input_dim=self.latent_dim,
-            hiddens=config["txt2img_hiddens"],
-            batchnorm=config["batchnorm"],
+            input_dim=min(self.n_components, self.latent_dim),
+            hiddens=self.config["txt2img_hiddens"],
+            batchnorm=self.config["batchnorm"],
         )
 
-        # Discriminator (modality classifier)
+        # Discriminators (modality classifiers)
         self.D_img = nn.Sequential(
-            nn.Linear(self.latent_dim, int(self.latent_dim / 4)),
+            nn.Linear(
+                min(self.n_components, self.latent_dim), int(self.latent_dim / 4)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(int(self.latent_dim / 4), 1),
         )
         self.D_txt = nn.Sequential(
-            nn.Linear(self.latent_dim, int(self.latent_dim / 4)),
+            nn.Linear(
+                min(self.n_components, self.latent_dim), int(self.latent_dim / 4)
+            ),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(int(self.latent_dim / 4), 1),
         )
@@ -221,7 +229,7 @@ class MultimodalGAN:
                 d_loss = self.adv_loss_fn(
                     self.D_img(txt2img_recon), txt_real
                 ) + self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
-            elif self.args.gan_type == 'wasserstein':
+            elif self.args.gan_type == "wasserstein":
                 d_loss = (
                     -self.D_img(txt2img_recon).mean() - self.D_txt(img2txt_recon).mean()
                 )
@@ -300,17 +308,18 @@ class MultimodalGAN:
         kwargs = {
             "num_workers": self.args.n_cpu,
             "shuffle": self.args.shuffle,
-            "pin_memory": True
+            "pin_memory": True,
         }
 
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_data)
 
+        print("Embedding txt data...")
         # embed h5ad data
         h5ad_embed = self.cellplm.forward(h5ad_dataset.data)
-        print(type(h5ad_embed))
         print(h5ad_embed.shape)
-        
+
+        print("Embedding img data...")
         # embed img data batch by batch
         img_loader = DataLoader(
             dataset=img_dataset,
@@ -318,21 +327,27 @@ class MultimodalGAN:
             shuffle=False,
         )
         img_embed = []
-        for imgs in img_loader:
+        for imgs in tqdm(img_loader):
             img_embed.extend(self.vit.forward(imgs))
         img_embed = torch.stack(img_embed)
-        print(type(img_embed))
-        print(type(h5ad_embed))
+        print(img_embed.shape)
 
         # Run PCA to ensure both modalities have the same dimensions
         if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
             print("Running PCA since text and image dimensions don't match...")
-            if self.latent_dim == self.config["img_latent_dim"]:
-                h5ad_embed = run_PCA(h5ad_embed, self.latent_dim)
+            n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
+            self.n_components = self.latent_dim
+            if n_samples < self.n_components:
+                print("Running PCA on GEX and image embeddings...")
+                self.n_components = min(n_samples, 50)
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
+                img_embed = run_PCA(img_embed, self.n_components)
+            elif self.n_components == self.config["img_latent_dim"]:
                 print("Running PCA on GEX embeddings...")
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
             else:
-                img_embed = run_PCA(img_embed, self.latent_dim)
                 print("Running PCA on image embeddings...")
+                img_embed = run_PCA(img_embed, self.n_components)
 
         # create a list of identifiers so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
@@ -347,7 +362,6 @@ class MultimodalGAN:
         )
 
         # TODO test_data; test_loader
-
 
     def embedding(
         self, dataloader, unify_modal="img"
@@ -382,8 +396,8 @@ class MultimodalGAN:
             self.D_txt.eval()
 
     def to_cuda(self):
-        self.cellplm.cuda()
-        self.vit.cuda()
+        # self.cellplm.cuda()
+        # self.vit.cuda()
         self.img2txt.cuda()
         self.txt2img.cuda()
         self.D_img.cuda()

@@ -16,8 +16,8 @@ DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=6)
-parser.add_argument("--batch_size", type=int, default=4)  # 128
+parser.add_argument("--n_epochs", type=int, default=20)
+parser.add_argument("--batch_size", type=int, default=128)  # 128
 parser.add_argument("--lr_g", type=float, default=1e-4,  # 1e-4
                     help="adam: learning rate for G")
 parser.add_argument("--lr_d", type=float, default=1e-4,  # 1e-4
@@ -59,7 +59,7 @@ parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16
                     help='Hugging Face ViT identifier')
 parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
                     help='path to GEX data')
-parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/',  # change as needed
+parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/control/AEC',  # change as needed
                     help='path to image data')
 args = parser.parse_args()
 

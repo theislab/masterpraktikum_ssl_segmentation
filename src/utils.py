@@ -83,16 +83,17 @@ class Custom_Dataloader:
         return length
 
 
-def run_PCA(x, n_feat):
-    x = x.detach().numpy()
-    x = StandardScaler().fit_transform(x)
-    pca = PCA(n_components=n_feat)
+def run_PCA(x, n_components):
+    x = x.detach().cpu().numpy()
+    # scaling is primarily important if the scales of the features differ
+    # x = StandardScaler().fit_transform(x)
+    pca = PCA(n_components=n_components)
     x = pca.fit_transform(x)
     return torch.tensor(x)
 
 
 def best_map(L1, L2):
-    # L1 should be the ground-truth labels and L2 should be the clustering labels we got
+    # L1 should be the ground-truth labels and L2 should be the clustering labels
     Label1 = np.unique(L1)
     nClass1 = len(Label1)
     Label2 = np.unique(L2)
