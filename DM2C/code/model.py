@@ -252,20 +252,34 @@ class MultimodalGAN:
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_path)
 
+        train_data, train_modal = self.prepare_data(img_dataset.train, h5ad_dataset.train)
+        test_data, test_modal = self.prepare_data(img_dataset.test, h5ad_dataset.test)
+
+
+        self.train_loader = Custom_Dataloader(dataset=train_data, modal = train_modal,
+                                       batch_size=self.args.batch_size,
+                                       shuffle=True)
+        #ordered_train_loader is used for creatin embeddings i.e. test
+        self.train_loader_ordered = Custom_Dataloader(dataset=test_data, modal = test_modal,
+                                               batch_size=self.args.batch_size,
+                                               shuffle=False)
+
+    def prepare_data(img_data, h5ad_data, self):
         # we need to embed the h5ad data first so we can input them into the dataloader
-        h5ad_embed = self.cell_plm.calc_embed(h5ad_dataset.data)
-        # same with images -- embed first
-        img_loader = DataLoader(dataset = img_dataset, # image loader so that not all images are read into memory for embedding calculation
-                                batch_size= self.args.batch_size,
-                                shuffle = True)
-        img_embed=[]
+        h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
+        # same with images -- embed first (also just train)
+        img_loader = DataLoader(dataset=img_data,
+                                # image loader so that not all images are read into memory for embedding calculation
+                                batch_size=self.args.batch_size,
+                                shuffle=True)
+        img_embed = []
         for load in img_loader:
             img_embed.extend(self.vis_trans.calc_embed(load))
         img_embed = torch.stack(img_embed)
         # use pca to get same dimension:
         if self.config['img_latent_dim'] != self.config['txt_latent_dim']:  # only in case that the dim are not the same
             print("Running PCA since dimensions don't match")
-            if self.latent_dim == self.config['img_latent_dim']: # if the min is the image dim
+            if self.latent_dim == self.config['img_latent_dim']:  # if the min is the image dim
                 h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
                 print("adjusting gene expression data to image dimension")
             else:
@@ -275,14 +289,9 @@ class MultimodalGAN:
         # add 0 / 1 so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        train_data = torch.cat((h5ad_embed, img_embed), dim=0)
+        return torch.cat((h5ad_embed, img_embed), dim=0), modalities
 
-        self.train_loader = Custom_Dataloader(dataset=train_data, modal = modalities,
-                                       batch_size=self.args.batch_size,
-                                       shuffle=True)
-        self.train_loader_ordered = Custom_Dataloader(dataset=train_data, modal = modalities,
-                                               batch_size=self.args.batch_size,
-                                               shuffle=False)
+
 
 
     def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions

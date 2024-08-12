@@ -7,6 +7,7 @@ import numpy as np
 import scipy.io as sio
 from torch.utils.data import Dataset
 from sklearn import metrics
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import math
@@ -52,16 +53,28 @@ class SFeatDataSet(Dataset):
 
 class h5ad_Dataset(Dataset):
     def __init__(self, h5ad_path):
-        self.data = self.prepare_h5ad(h5ad_path)
-    def prepare_h5ad(self, h5ad_path):
-        data = ad.read_h5ad(h5ad_path)
+        self.train_paths, self.test_paths = split_data(recursive_file_list(h5ad_path))
+        self.train, self.test = self.concatenating_h5ad(self.train_paths), self.concatenating_h5ad(self.test)
+        self.train, self.test = self.prepare_h5ad(self.train_paths), self.prepare(self.test)
+    def concatenating_h5ad(paths):
+        ad_objects = []
+        for file in paths:
+            object = ad.read_h5ad(file)
+            if 'AML' in file:
+                object.obs['ID'] = 'AML'
+            else:
+                object.obs['ID'] = 'BM'
+            ad_objects.append(object)
+        return ad.concat(ad_objects)
+    def prepare_h5ad(self, data):
+        #data = ad.read_h5ad(h5ad_path)
         data.obs_names_make_unique()
         return data
 
 class img_Dataset(Dataset):
     def __init__(self, img_path):
-        names = os.listdir(img_path)
-        self.imgs = [os.path.join(img_path,name) for name in names]
+        self.imgs = recursive_file_list(img_path)
+        self.train, self.test = train_test_split(self.imgs)
     def __getitem__(self, index):
         return self.imgs[index]
     def __len__(self):
@@ -100,6 +113,19 @@ class Custom_Dataloader():
         batch_number = dataset_length / self.batch_size
         length = math.ceil(batch_number)
         return length
+
+def recursive_file_list(start_path='.'):
+    paths = []
+    for root, dirs, files in os.walk(start_path):
+        for file in files:
+            paths.append(os.path.join(root, file))
+    return paths
+
+def split_data(paths):
+    train, test = train_test_split(paths, test_size=0.15, random_state=42)
+    return train, test
+
+
 
 def run_PCA_on_modal(x, n_feat):
     ''' have to wait for bigger dataset with this

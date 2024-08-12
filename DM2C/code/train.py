@@ -130,7 +130,7 @@ if __name__ == '__main__':
         print(epoch)
         model.train(epoch)
     train_embedding = model.embedding(
-        model.train_loader_ordered, unify_modal='txt')
+        model.train_loader_ordered, unify_modal='txt') #here used as test
     print(train_embedding)
         # test_embedding, test_target, test_modality = model.embedding( no test set as of now
         #    model.test_loader, unify_modal='img')
