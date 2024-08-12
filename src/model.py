@@ -7,6 +7,7 @@ import logging
 import itertools
 
 import anndata
+import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from transformers import ViTImageProcessor, ViTForImageClassification
@@ -350,16 +351,33 @@ class MultimodalGAN:
         # create a list of identifiers so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        train_data = torch.cat((h5ad_embed, img_embed), dim=0)
+        # split into training and test set
+        test_indices_h5ad = np.random.choice(len(h5ad_embed), size=int(len(h5ad_embed) * 0.2), replace=False)
+        train_indices_h5ad = np.setdiff1d(np.arange(0, len(h5ad_embed)), test_indices_h5ad)
+        test_indices_img = np.random.choice(len(img_embed), size=int(len(img_embed) * 0.2), replace=False)
+        train_indices_img = np.setdiff1d(np.arange(0, len(img_embed)), test_indices_img)
+
+        train_data = torch.cat((h5ad_embed[train_indices_h5ad], img_embed[train_indices_img]), dim=0)
+        train_modalities = [0 for embed in train_indices_h5ad] + [1 for embed in train_indices_img]
 
         self.train_loader = Custom_Dataloader(
             dataset=train_data,
-            modal=modalities,
+            modal=train_modalities,
             batch_size=self.args.batch_size,
             shuffle=bool(kwargs["shuffle"]),
         )
 
         # TODO test_data; test_loader
+        test_data = torch.cat((h5ad_embed[test_indices_h5ad], img_embed[test_indices_img]), dim=0)
+        test_modalities = test_modalities = [0 for embed in test_indices_h5ad] + [1 for embed in test_indices_img]
+
+        self.test_loader = Custom_Dataloader(
+            dataset=test_data,
+            modal=test_modalities,
+            batch_size=self.args.batch_size,
+            shuffle=bool(kwargs["shuffle"]),
+        )
+
 
     def embedding(
         self, dataloader, unify_modal="img"

@@ -4,6 +4,7 @@ import os
 import time
 import argparse
 
+import numpy as np
 import torch
 from sklearn.cluster import KMeans
 
@@ -104,11 +105,19 @@ if __name__ == '__main__':
         model.train(epoch)
     
     train_embedding = model.embedding(
-        model.train_loader, unify_modal='txt')
+        model.train_loader, unify_modal='txt') # why unify_modal='txt'?
+
+
     # TODO: save train_embedding
+
+    #np.save(DAT_DIR + "/train_embeddings", train_embedding)
     
-    # test_embedding, test_target, test_modality = model.embedding( no test set as of now
-    #    model.test_loader, unify_modal='img')
+    test_embedding = model.embedding(
+       model.test_loader, unify_modal='img') # why unify_modal='img'?
+    print("Test embedding: ")
+    print(test_embedding)
+
+
     # no need for kmeans
     # kmeans = KMeans(config['n_clusters'], max_iter=1000,
     #                tol=5e-5, n_init=20).fit(train_embedding)
