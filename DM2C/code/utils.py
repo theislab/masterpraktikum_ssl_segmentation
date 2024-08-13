@@ -54,9 +54,9 @@ class SFeatDataSet(Dataset):
 class h5ad_Dataset(Dataset):
     def __init__(self, h5ad_path):
         self.train_paths, self.test_paths = split_data(recursive_file_list(h5ad_path))
-        self.train, self.test = self.concatenating_h5ad(self.train_paths), self.concatenating_h5ad(self.test)
-        self.train, self.test = self.prepare_h5ad(self.train_paths), self.prepare(self.test)
-    def concatenating_h5ad(paths):
+        self.train, self.test = self.concatenating_h5ad(self.train_paths), self.concatenating_h5ad(self.test_paths)
+        self.train, self.test = self.prepare_h5ad(self.train), self.prepare_h5ad(self.test)
+    def concatenating_h5ad(self, paths):
         ad_objects = []
         for file in paths:
             object = ad.read_h5ad(file)
@@ -119,6 +119,7 @@ def recursive_file_list(start_path='.'):
     for root, dirs, files in os.walk(start_path):
         for file in files:
             paths.append(os.path.join(root, file))
+    print(paths)
     return paths
 
 def split_data(paths):

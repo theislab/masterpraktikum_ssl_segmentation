@@ -5,7 +5,7 @@ from __future__ import print_function, absolute_import, division
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
 import anndata
-from CellPLM_repo.CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
+from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 import logging
 import os
 import itertools
@@ -61,7 +61,7 @@ class DeepAE(nn.Module):
 class CellPLM_model():
     def __init__(self, model:str, device:str='cpu'):
         self.pipeline = CellEmbeddingPipeline(pretrain_prefix=model,  # Specify the pretrain checkpoint to load
-                                         pretrain_directory='../../../models/cellplm/')
+                                         pretrain_directory='../../ckpt')
         self.device = device
     def calc_embed(self, data:anndata.AnnData):
         embedding = self.pipeline.predict(data,  # An AnnData object
@@ -264,7 +264,7 @@ class MultimodalGAN:
                                                batch_size=self.args.batch_size,
                                                shuffle=False)
 
-    def prepare_data(img_data, h5ad_data, self):
+    def prepare_data(self, img_data, h5ad_data):
         # we need to embed the h5ad data first so we can input them into the dataloader
         h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
         # same with images -- embed first (also just train)

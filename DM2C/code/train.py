@@ -55,11 +55,11 @@ parser.add_argument('--cpt_dir', type=str, default='cpt/',
                     help="dir for saved checkpoint")
 parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help="path to cell plm model ") # "path to load txt AE checkpoint" changed to txt embeddings instead of AE checkpoint
-parser.add_argument('--h5ad_data', type=str, default='data/Toy/concatenated.h5ad',
-                    help="path to trascriptional data")
+parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/subgroup_merel/gex_data/anndata/',
+                    help="path to transcriptional data")
 parser.add_argument('--hugging_face', type=str, default="google/vit-base-patch16-224",
                     help="path to visual transformer") # "path to load img AE checkpoint" changed to txt embeddings instead of AE checkpoint
-parser.add_argument('--img_path', type=str, default="data/Toy/img/",
+parser.add_argument('--img_path', type=str, default="/p/project1/hai_pathology/subgroup_merel/image_data/",
                     help="path to image folder")
 parser.add_argument('--dm2c_cptpath', type=str, default='cpt/',
                     help="path to load dm2c checkpoint")
