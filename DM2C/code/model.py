@@ -291,9 +291,6 @@ class MultimodalGAN:
 
         return torch.cat((h5ad_embed, img_embed), dim=0), modalities
 
-
-
-
     def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions
         self.set_model_status(training=False)
         with torch.no_grad():

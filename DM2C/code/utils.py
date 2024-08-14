@@ -119,7 +119,6 @@ def recursive_file_list(start_path='.'):
     for root, dirs, files in os.walk(start_path):
         for file in files:
             paths.append(os.path.join(root, file))
-    print(paths)
     return paths
 
 def split_data(paths):
