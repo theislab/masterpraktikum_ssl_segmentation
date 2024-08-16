@@ -55,7 +55,7 @@ parser.add_argument('--cpt_dir', type=str, default='cpt/',
                     help="dir for saved checkpoint")
 parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help="path to cell plm model ") # "path to load txt AE checkpoint" changed to txt embeddings instead of AE checkpoint
-parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/subgroup_merel/gex_data/anndata/',
+parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/embeddings/gex_embed/',
                     help="path to transcriptional data")
 parser.add_argument('--hugging_face', type=str, default="google/vit-base-patch16-224",
                     help="path to visual transformer") # "path to load img AE checkpoint" changed to txt embeddings instead of AE checkpoint
@@ -77,6 +77,7 @@ torch.backends.cudnn.benchmark = False
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 
 if __name__ == '__main__':
+    print("starting")
     config = dict()
     if args.dataset == 'wikipedia':
         config['img_input_dim'] = 2048
@@ -119,6 +120,7 @@ if __name__ == '__main__':
     args.cpt_dir = os.path.join(args.cpt_dir, current_time)
     os.mkdir(args.cpt_dir)
 
+    print('starting model')
     model = MultimodalGAN(args, config)
     if use_cuda:
         model.to_cuda()

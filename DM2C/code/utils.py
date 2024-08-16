@@ -54,8 +54,17 @@ class SFeatDataSet(Dataset):
 class h5ad_Dataset(Dataset):
     def __init__(self, h5ad_path):
         self.train_paths, self.test_paths = split_data(recursive_file_list(h5ad_path))
-        self.train, self.test = self.concatenating_h5ad(self.train_paths), self.concatenating_h5ad(self.test_paths)
-        self.train, self.test = self.prepare_h5ad(self.train), self.prepare_h5ad(self.test)
+        self.train, self.test = self.get_data(self.train_paths), self.get_data(self.test_paths)
+        #self.train, self.test = self.concatenating_h5ad(self.train_paths), self.concatenating_h5ad(self.test_paths)
+        #self.train, self.test = self.prepare_h5ad(self.train), self.prepare_h5ad(self.test)
+
+    def get_data(self, paths):
+        data = []
+        for file in paths:
+            data.append(torch.from_numpy(np.load(file)))
+        return torch.cat(data)
+
+    # not needed as we embedded the h5ad data beforehand
     def concatenating_h5ad(self, paths):
         ad_objects = []
         for file in paths:
@@ -123,7 +132,7 @@ def recursive_file_list(start_path='.'):
 
 def split_data(paths):
     train, test = train_test_split(paths, test_size=0.15, random_state=42)
-    return train, test
+    return train[1:5], test[1:5]
 
 
 

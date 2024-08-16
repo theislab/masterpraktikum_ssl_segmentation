@@ -5,7 +5,7 @@ from __future__ import print_function, absolute_import, division
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
 import anndata
-from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
+#from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 import logging
 import os
 import itertools
@@ -21,9 +21,11 @@ logging.basicConfig(level=logging.INFO,
                     filename='output.log',
                     datefmt='%Y/%m/%d %H:%M:%S',
                     format='%(asctime)s: %(name)s [%(levelname)s] %(message)s')
-info_string1 = ('Epoch: %3d/%3d|Batch: %2d/%2d||D_loss: %.4f|D1_loss: %.4f|'
-                'D2_loss: %.4f||G_loss: %.4f|R1_loss: %.4f|R2_loss: %.4f|R121_loss: %.4f|'
-                'R212_loss: %.4f')
+
+info_string1 = (
+    "Epoch: %3d/%3d|Batch: %2d/%2d||D_loss: %.4f|D1_loss: %.4f|"
+    "D2_loss: %.4f||G_loss: %.4f|R121_loss: %.4f|R212_loss: %.4f"
+)
 
 
 # no need for autoencoder in masterpraktikum but this class also needed for Generators
@@ -58,6 +60,7 @@ class DeepAE(nn.Module):
         output = self.decoder(latent)
         return output, latent
 
+''' not needed because embeddings are calculated beforehand
 class CellPLM_model():
     def __init__(self, model:str, device:str='cpu'):
         self.pipeline = CellEmbeddingPipeline(pretrain_prefix=model,  # Specify the pretrain checkpoint to load
@@ -67,6 +70,8 @@ class CellPLM_model():
         embedding = self.pipeline.predict(data,  # An AnnData object
                                      device=self.device)  # Specify a gpu or cpu for model inference
         return embedding
+        
+'''
 
 class Vision_Trans():
         def __init__(self, hugging_face:str):
@@ -97,7 +102,7 @@ class MultimodalGAN:
             self.logger.debug("{0}: {1}".format(k, v))
 
         # Encoders
-        self.cell_plm = CellPLM_model(self.args.cellplm_model)
+        #self.cell_plm = CellPLM_model(self.args.cellplm_model)
         self.vis_trans = Vision_Trans(self.args.hugging_face)
 
         # Generator
@@ -231,11 +236,19 @@ class MultimodalGAN:
                                       self.args.clip_value)
 
             if (step + 1) % self.args.log_freq == 0:
-                self.logger.info(info_string1 % (
-                    epoch, self.args.n_epochs, step, len(self.train_loader),
-                    D_loss.item(), img_D_loss.item(), txt_D_loss.item(),
-                    G_loss.item(),  img_cycle_loss.item(),
-                    txt_cycle_loss.item()))
+                self.logger.info(info_string1
+                                 % (epoch,
+                                    self.args.n_epochs,
+                                    step,
+                                    len(self.train_loader),
+                                    D_loss.item(),
+                                    img_D_loss.item(),
+                                    txt_D_loss.item(),
+                                    G_loss.item(),
+                                    img_cycle_loss.item(),
+                                    txt_cycle_loss.item()
+                                    )
+                                )
                 self.writer.add_scalar(
                     'Train/G_loss', G_loss.item(),
                     step + len(self.train_loader) * epoch)
@@ -247,14 +260,16 @@ class MultimodalGAN:
             self.save_cpt(epoch)
 
     def _build_masterpraktikum_dataloader(self):
+        print('building')
         kwargs = {'num_workers': self.args.n_cpu, 'pin_memory': True}
 
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_path)
+        print('dataset prepared')
 
         train_data, train_modal = self.prepare_data(img_dataset.train, h5ad_dataset.train)
         test_data, test_modal = self.prepare_data(img_dataset.test, h5ad_dataset.test)
-
+        print('data prepared')
 
         self.train_loader = Custom_Dataloader(dataset=train_data, modal = train_modal,
                                        batch_size=self.args.batch_size,
@@ -264,10 +279,12 @@ class MultimodalGAN:
                                                batch_size=self.args.batch_size,
                                                shuffle=False)
 
-    def prepare_data(self, img_data, h5ad_data):
-        # we need to embed the h5ad data first so we can input them into the dataloader
-        h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
+    def prepare_data(self, img_data, h5ad_embed):
+        # code has been adjust for using the embedded files instead of cellplm
+        # no need for embedding
+        # h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
         # same with images -- embed first (also just train)
+        print('preparing data')
         img_loader = DataLoader(dataset=img_data,
                                 # image loader so that not all images are read into memory for embedding calculation
                                 batch_size=self.args.batch_size,
@@ -276,6 +293,7 @@ class MultimodalGAN:
         for load in img_loader:
             img_embed.extend(self.vis_trans.calc_embed(load))
         img_embed = torch.stack(img_embed)
+        print('images embedded')
         # use pca to get same dimension:
         if self.config['img_latent_dim'] != self.config['txt_latent_dim']:  # only in case that the dim are not the same
             print("Running PCA since dimensions don't match")
@@ -289,7 +307,7 @@ class MultimodalGAN:
         # add 0 / 1 so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        return torch.cat((h5ad_embed, img_embed), dim=0), modalities
+        return torch.cat((h5ad_embed, img_embed), dim=0).to(self.config['device']), modalities
 
     def embedding(self, dataloader, unify_modal='img'): # actually encodes / makes predictions
         self.set_model_status(training=False)
