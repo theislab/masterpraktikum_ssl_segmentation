@@ -84,7 +84,6 @@ class Custom_Dataloader:
 
 
 def run_PCA(x, n_components):
-    x = x.detach().cpu().numpy()
     # scaling is primarily important if the scales of the features differ
     # x = StandardScaler().fit_transform(x)
     pca = PCA(n_components=n_components)

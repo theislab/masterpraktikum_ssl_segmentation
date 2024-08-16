@@ -59,9 +59,15 @@ parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help='CellPLM ckpt')
 parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16-224',
                     help='Hugging Face ViT identifier')
-parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
+#parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
+#                    help='path to GEX data')
+#parser.add_argument('--h5ad_data', type=str, default='/p/home/jusers/wonneberger1/judac/shared/DanielaWonneberger/fusion/DM2C/code/data/Concatenated.h5ad',
+#                    help='path to GEX data')
+parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/embeddings/gex_embed/GSM3587923_AML1012-D0.npy',
                     help='path to GEX data')
-parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/control/AEC',  # change as needed
+#parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/control/AEC',  # change as needed
+#                    help='path to image data')
+parser.add_argument('--img_data', type=str, default='/p/project1/hai_pathology/subgroup_merel/image_data/control/AEC',  # change as needed
                     help='path to image data')
 args = parser.parse_args()
 
@@ -76,7 +82,7 @@ METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 if __name__ == '__main__':
     config = dict()
     if args.dataset == 'masterpraktikum':
-        config['img_latent_dim'] = 768
+        config['img_latent_dim'] = 512
         config['txt_latent_dim'] = 512
         # hidden dims <= data dims
         config['img2txt_hiddens'] = [512, 512]
@@ -97,26 +103,25 @@ if __name__ == '__main__':
 
     model = MultimodalGAN(args, config)
     use_cuda = torch.cuda.is_available()
-    print(f"CUDA is available: {use_cuda}")
+    print("Cuda is available: ", use_cuda)
+
     if use_cuda:
         model.to_cuda()
 
     for epoch in range(args.n_epochs):
-        print(epoch)
+        print("epoch: ", epoch)
         model.train(epoch)
 
     train_embedding = model.embedding(
         model.train_loader, unify_modal='txt') # why unify_modal='txt'?
 
 
-    # TODO: save train_embedding
+    # save train_embedding
 
-    #np.save(DAT_DIR + "/train_embeddings", train_embedding)
+    np.save(DAT_DIR + "/train_embeddings", train_embedding)
     
     test_embedding = model.embedding(
        model.test_loader, unify_modal='img') # why unify_modal='img'?
-    print("Test embedding: ")
-    print(test_embedding)
 
 
     # no need for kmeans

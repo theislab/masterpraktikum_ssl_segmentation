@@ -38,7 +38,6 @@ info_string1 = (
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
 class DeepAE(nn.Module):
     """DeepAE: FC AutoEncoder"""
 
@@ -203,6 +202,7 @@ class MultimodalGAN:
 
     def train(self, epoch):
         self.set_model_status(training=True)
+
         for step, (txt_embed, img_embed) in enumerate(self.train_loader):
             # -----------------
             #  Train Generator
@@ -320,6 +320,7 @@ class MultimodalGAN:
 
         self.args.h5ad_data = '/p/project1/hai_pathology/embeddings/gex_embed/GSM3587923_AML1012-D0.npy'
         h5ad_embed = np.load(self.args.h5ad_data)
+        print("h5ad_embed shape: ", h5ad_embed.shape)
 
         print("Embedding img data...")
         # embed img data batch by batch
@@ -332,11 +333,12 @@ class MultimodalGAN:
         img_embed = []
         for imgs in tqdm(img_loader):
             img_embed.extend(self.vit.forward(imgs))
-        img_embed = torch.stack(img_embed)
-        print(img_embed.shape)
+        img_embed = np.array(img_embed)
+        print("img_embed shape: ", img_embed.shape)
+
 
         # Run PCA to ensure both modalities have the same dimensions
-        if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
+        if img_embed.shape[1] != h5ad_embed.shape[1]:
             print("Running PCA since text and image dimensions don't match...")
             n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
             self.n_components = self.latent_dim
@@ -351,9 +353,8 @@ class MultimodalGAN:
             else:
                 print("Running PCA on image embeddings...")
                 img_embed = run_PCA(img_embed, self.n_components)
-        print("PCA done")
-        # create a list of identifiers so we can distinguish the modalities
-        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
+        h5ad_embed = torch.Tensor(h5ad_embed)
+        img_embed = torch.Tensor(img_embed)
 
         # split into training and test set
         h5ad_train, h5ad_test, h5ad_train_modalities, h5ad_test_modalities = train_test_split(
@@ -381,7 +382,6 @@ class MultimodalGAN:
             batch_size=self.args.batch_size,
             shuffle=bool(kwargs["shuffle"]),
         )
-        print("Dataloader done ...")
 
     def _build_masterpraktikum_dataloader_old(self):
         kwargs = {
@@ -396,7 +396,6 @@ class MultimodalGAN:
         print("Embedding txt data...")
         # embed h5ad data
         h5ad_embed = self.cellplm.forward(h5ad_dataset.data)
-        print(h5ad_embed.shape)
 
         print("Embedding img data...")
         # embed img data batch by batch
@@ -409,7 +408,6 @@ class MultimodalGAN:
         for imgs in tqdm(img_loader):
             img_embed.extend(self.vit.forward(imgs))
         img_embed = torch.stack(img_embed)
-        print(img_embed.shape)
 
         # Run PCA to ensure both modalities have the same dimensions
         if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
@@ -447,7 +445,6 @@ class MultimodalGAN:
             shuffle=bool(kwargs["shuffle"]),
         )
 
-        # TODO test_data; test_loader
         test_data = torch.cat((h5ad_embed[test_indices_h5ad], img_embed[test_indices_img]), dim=0)
         test_modalities = test_modalities = [0 for embed in test_indices_h5ad] + [1 for embed in test_indices_img]
 
