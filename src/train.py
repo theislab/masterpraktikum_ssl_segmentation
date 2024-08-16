@@ -9,6 +9,7 @@ from sklearn.cluster import KMeans
 
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
+import numpy as np
 
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 CPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
@@ -57,9 +58,9 @@ parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help='CellPLM ckpt')
 parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16-224',
                     help='Hugging Face ViT identifier')
-parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
+parser.add_argument('--h5ad_data', type=str, default=f'/p/project1/hai_pathology/embeddings/gex_embed/',  # change as needed
                     help='path to GEX data')
-parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/control/AEC',  # change as needed
+parser.add_argument('--img_data', type=str, default=f'/p/project1/hai_pathology/subgroup_merel/image_data/',  # change as needed
                     help='path to image data')
 args = parser.parse_args()
 
@@ -106,6 +107,7 @@ if __name__ == '__main__':
     train_embedding = model.embedding(
         model.train_loader, unify_modal='txt')
     # TODO: save train_embedding
+    np.save(DAT_DIR, train_embedding)
     
     # test_embedding, test_target, test_modality = model.embedding( no test set as of now
     #    model.test_loader, unify_modal='img')

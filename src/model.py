@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA
+from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA_on_modal
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,7 +66,7 @@ class DeepAE(nn.Module):
         output = self.decoder(latent)
         return output, latent
 
-
+''' not needed as the embeddings are precalculated and saved
 class CellPLM_AE:
     def __init__(self, model: str):
         ckpt_directory = os.path.abspath(
@@ -84,6 +84,7 @@ class CellPLM_AE:
         )
         return embedding
 
+'''
 
 class ViT_AE:
     def __init__(self, hugging_face: str):
@@ -121,7 +122,7 @@ class MultimodalGAN:
             self.logger.debug("{0}: {1}".format(k, v))
 
         # Encoders
-        self.cellplm = CellPLM_AE(self.args.cellplm_model)
+        #self.cellplm = CellPLM_AE(self.args.cellplm_model)
         self.vit = ViT_AE(self.args.hugging_face)
 
         self.latent_dim_img = self.config["img_latent_dim"]
@@ -302,6 +303,36 @@ class MultimodalGAN:
         if epoch > 10 and (epoch + 1) % self.args.save_freq == 0:
             self.save_cpt(epoch)
 
+    def embed_and_prepare_data(self, img_data, h5ad_embed): # embeds images and prepares data test/train
+        # code has been adjust for using the embedded files instead of cellplm
+        # no need for embedding
+        # h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
+        # same with images -- embed first (also just train)
+        print('preparing data')
+        img_loader = DataLoader(dataset=img_data,
+                                # image loader so that not all images are read into memory for embedding calculation
+                                batch_size=self.args.batch_size,
+                                shuffle=True)
+        img_embed = []
+        for load in img_loader:
+            img_embed.extend(self.vis_trans.calc_embed(load))
+        img_embed = torch.stack(img_embed)
+        print('images embedded')
+        # use pca to get same dimension:
+        if self.config['img_latent_dim'] != self.config['txt_latent_dim']:  # only in case that the dim are not the same
+            print("Running PCA since dimensions don't match")
+            if self.latent_dim == self.config['img_latent_dim']:  # if the min is the image dim
+                h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
+                print("adjusting gene expression data to image dimension")
+            else:
+                img_embed = run_PCA_on_modal(img_embed, self.latent_dim)
+                print("adjusting image data to gene expression dimension")
+
+        # add 0 / 1 so we can distinguish the modalities
+        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
+
+        return torch.cat((h5ad_embed, img_embed), dim=0).to(self.config['device']), modalities
+
     def _build_masterpraktikum_dataloader(self):
         kwargs = {
             "num_workers": self.args.n_cpu,
@@ -312,54 +343,21 @@ class MultimodalGAN:
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_data)
 
-        print("Embedding txt data...")
-        # embed h5ad data
-        h5ad_embed = self.cellplm.forward(h5ad_dataset.data)
-        print(h5ad_embed.shape)
-
-        print("Embedding img data...")
-        # embed img data batch by batch
-        img_loader = DataLoader(
-            dataset=img_dataset,
-            batch_size=self.args.batch_size,
-            shuffle=False,
-        )
-        img_embed = []
-        for imgs in tqdm(img_loader):
-            img_embed.extend(self.vit.forward(imgs))
-        img_embed = torch.stack(img_embed)
-        print(img_embed.shape)
-
-        # Run PCA to ensure both modalities have the same dimensions
-        if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
-            print("Running PCA since text and image dimensions don't match...")
-            n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
-            self.n_components = self.latent_dim
-            if n_samples < self.n_components:
-                print("Running PCA on GEX and image embeddings...")
-                self.n_components = min(n_samples, 50)
-                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
-                img_embed = run_PCA(img_embed, self.n_components)
-            elif self.n_components == self.config["img_latent_dim"]:
-                print("Running PCA on GEX embeddings...")
-                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
-            else:
-                print("Running PCA on image embeddings...")
-                img_embed = run_PCA(img_embed, self.n_components)
-
-        # create a list of identifiers so we can distinguish the modalities
-        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
-
-        train_data = torch.cat((h5ad_embed, img_embed), dim=0)
+        train_data, train_modal = self.embed_and_prepare_data(img_dataset.train, h5ad_dataset.train)
+        test_data, test_modal = self.embed_and_prepare_data(img_dataset.test, h5ad_dataset.test)
+        print('data prepared')
 
         self.train_loader = Custom_Dataloader(
             dataset=train_data,
-            modal=modalities,
+            modal=train_modal,
             batch_size=self.args.batch_size,
             shuffle=bool(kwargs["shuffle"]),
         )
 
         # TODO test_data; test_loader
+        self.test_loader_ordered = Custom_Dataloader(dataset=test_data, modal=test_modal,
+                                                      batch_size=self.args.batch_size,
+                                                      shuffle=False)
 
     def embedding(
         self, dataloader, unify_modal="img"

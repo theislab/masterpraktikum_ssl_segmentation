@@ -9,31 +9,26 @@ from torch.utils.data import Dataset
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 from sklearn.metrics.cluster import contingency_matrix
 from munkres import Munkres
 
 
 class h5ad_Dataset(Dataset):
-    def __init__(self, h5ad_path):
-        self.data = self.prepare_h5ad(h5ad_path)
+    def __init__(self, h5ad_path): # the data is directly read in as opposed to being encoded
+        self.train_paths, self.test_paths = split_data(recursive_file_list(h5ad_path)) # splitting the paths
+        self.train, self.test = self.get_data(self.train_paths), self.get_data(self.test_paths)
 
-    def prepare_h5ad(self, h5ad_path):
-        data = ad.read_h5ad(h5ad_path)
-        data.obs_names_make_unique()
-        return data
-
+    def get_data(self, paths): # reads in the embeddings and concatenates them into one tensor for all the samples
+        data = []
+        for file in paths:
+            data.append(torch.from_numpy(np.load(file)))
+        return torch.cat(data)
 
 class img_Dataset(Dataset):
     def __init__(self, img_path):
-        self.imgs = self._get_image_paths(img_path)
-
-    def _get_image_paths(self, root_dir):
-        image_paths = []
-        for root, _, files in os.walk(root_dir):
-            for file in files:
-                if file.endswith(('.jpg', '.jpeg', '.png', '.tif')):  # Add more extensions if needed
-                    image_paths.append(os.path.join(root, file))
-        return image_paths
+        self.imgs = recursive_file_list(img_path, ('.jpg', '.jpeg', '.png', '.tif'))
+        self.train, self.test = split_data(self.imgs)
 
     def __getitem__(self, index):
         return self.imgs[index]
@@ -82,6 +77,17 @@ class Custom_Dataloader:
         length = math.ceil(batch_number)
         return length
 
+def recursive_file_list(start_path='.',endings = ('h5ad')):
+    paths = []
+    for root, dirs, files in os.walk(start_path):
+        for file in files:
+            if file.endswith(endings):
+                paths.append(os.path.join(root, file))
+    return paths
+
+def split_data(paths):
+    train, test = train_test_split(paths, test_size=0.15, random_state=42)
+    return train[1:5], test[1:5]
 
 def run_PCA(x, n_components):
     x = x.detach().cpu().numpy()
