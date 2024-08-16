@@ -11,6 +11,7 @@ from sklearn.cluster import KMeans
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
 
+
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 CPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
 DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
@@ -103,7 +104,7 @@ if __name__ == '__main__':
     for epoch in range(args.n_epochs):
         print(epoch)
         model.train(epoch)
-    
+
     train_embedding = model.embedding(
         model.train_loader, unify_modal='txt') # why unify_modal='txt'?
 

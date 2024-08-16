@@ -5,13 +5,15 @@ from __future__ import print_function, absolute_import, division
 import os
 import logging
 import itertools
+from os.path import isfile, join
 
 import anndata
 import numpy as np
 from PIL import Image
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from transformers import ViTImageProcessor, ViTForImageClassification
-from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
+#from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 
 import torch
 import torch.nn.functional as F
@@ -68,6 +70,7 @@ class DeepAE(nn.Module):
         return output, latent
 
 
+'''
 class CellPLM_AE:
     def __init__(self, model: str):
         ckpt_directory = os.path.abspath(
@@ -84,6 +87,7 @@ class CellPLM_AE:
             x, device=self.device  # x: AnnData object  # device: gpu or cpu
         )
         return embedding
+'''
 
 
 class ViT_AE:
@@ -122,7 +126,7 @@ class MultimodalGAN:
             self.logger.debug("{0}: {1}".format(k, v))
 
         # Encoders
-        self.cellplm = CellPLM_AE(self.args.cellplm_model)
+        # self.cellplm = CellPLM_AE(self.args.cellplm_model)
         self.vit = ViT_AE(self.args.hugging_face)
 
         self.latent_dim_img = self.config["img_latent_dim"]
@@ -231,7 +235,7 @@ class MultimodalGAN:
                 ) + self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
             elif self.args.gan_type == "wasserstein":
                 d_loss = (
-                    -self.D_img(txt2img_recon).mean() - self.D_txt(img2txt_recon).mean()
+                        -self.D_img(txt2img_recon).mean() - self.D_txt(img2txt_recon).mean()
                 )
             else:
                 raise ValueError()
@@ -247,22 +251,22 @@ class MultimodalGAN:
 
                 if self.args.gan_type == "naive":
                     img_D_loss = (
-                        self.adv_loss_fn(self.D_img(img_embed.detach()), img_real)
-                        + self.adv_loss_fn(self.D_img(txt2img_recon.detach()), txt_fake)
-                    ) / 2
+                                         self.adv_loss_fn(self.D_img(img_embed.detach()), img_real)
+                                         + self.adv_loss_fn(self.D_img(txt2img_recon.detach()), txt_fake)
+                                 ) / 2
                     txt_D_loss = (
-                        self.adv_loss_fn(self.D_txt(txt_embed.detach()), txt_real)
-                        + self.adv_loss_fn(self.D_txt(img2txt_recon.detach()), img_fake)
-                    ) / 2
+                                         self.adv_loss_fn(self.D_txt(txt_embed.detach()), txt_real)
+                                         + self.adv_loss_fn(self.D_txt(img2txt_recon.detach()), img_fake)
+                                 ) / 2
                     D_loss = (img_D_loss + txt_D_loss) * self.args.lamda3
                 elif self.args.gan_type == "wasserstein":
                     img_D_loss = (
-                        self.D_img(txt2img_recon.detach()).mean()
-                        - self.D_img(img_embed.detach()).mean()
+                            self.D_img(txt2img_recon.detach()).mean()
+                            - self.D_img(img_embed.detach()).mean()
                     )
                     txt_D_loss = (
-                        self.D_txt(img2txt_recon.detach()).mean()
-                        - self.D_txt(txt_embed.detach()).mean()
+                            self.D_txt(img2txt_recon.detach()).mean()
+                            - self.D_txt(txt_embed.detach()).mean()
                     )
                     D_loss = (img_D_loss + txt_D_loss) * self.args.lamda3
                 else:
@@ -304,6 +308,82 @@ class MultimodalGAN:
             self.save_cpt(epoch)
 
     def _build_masterpraktikum_dataloader(self):
+        kwargs = {
+            "num_workers": self.args.n_cpu,
+            "shuffle": self.args.shuffle,
+            "pin_memory": True,
+        }
+
+        print("Read gex embedding data...")
+        # self.args.h5ad_data = '/p/project1/hai_pathology/embeddings/gex_embed'
+        # h5ad_embed = [np.load(f) for f in os.listdir(self.args.h5ad_data)]
+
+        self.args.h5ad_data = '/p/project1/hai_pathology/embeddings/gex_embed/GSM3587923_AML1012-D0.npy'
+        h5ad_embed = np.load(self.args.h5ad_data)
+
+        print("Embedding img data...")
+        # embed img data batch by batch
+        img_dataset = img_Dataset(self.args.img_data)
+        img_loader = DataLoader(
+            dataset=img_dataset,
+            batch_size=self.args.batch_size,
+            shuffle=False,
+        )
+        img_embed = []
+        for imgs in tqdm(img_loader):
+            img_embed.extend(self.vit.forward(imgs))
+        img_embed = torch.stack(img_embed)
+        print(img_embed.shape)
+
+        # Run PCA to ensure both modalities have the same dimensions
+        if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
+            print("Running PCA since text and image dimensions don't match...")
+            n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
+            self.n_components = self.latent_dim
+            if n_samples < self.n_components:
+                print("Running PCA on GEX and image embeddings...")
+                self.n_components = min(n_samples, 50)
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
+                img_embed = run_PCA(img_embed, self.n_components)
+            elif self.n_components == self.config["img_latent_dim"]:
+                print("Running PCA on GEX embeddings...")
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
+            else:
+                print("Running PCA on image embeddings...")
+                img_embed = run_PCA(img_embed, self.n_components)
+        print("PCA done")
+        # create a list of identifiers so we can distinguish the modalities
+        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
+
+        # split into training and test set
+        h5ad_train, h5ad_test, h5ad_train_modalities, h5ad_test_modalities = train_test_split(
+            h5ad_embed, [0 for embed in h5ad_embed], test_size=0.2, random_state=42)
+
+        img_train, img_test, img_train_modalities, img_test_modalities = train_test_split(
+            img_embed, [1 for embed in img_embed], test_size=0.2, random_state=42)
+
+        train_data = torch.cat((h5ad_train, img_train), dim=0)
+        train_modalities = h5ad_train_modalities + img_train_modalities
+
+        self.train_loader = Custom_Dataloader(
+            dataset=train_data,
+            modal=train_modalities,
+            batch_size=self.args.batch_size,
+            shuffle=bool(kwargs["shuffle"]),
+        )
+
+        test_data = torch.cat((h5ad_test, img_test), dim=0)
+        test_modalities = h5ad_test_modalities + img_test_modalities
+
+        self.test_loader = Custom_Dataloader(
+            dataset=test_data,
+            modal=test_modalities,
+            batch_size=self.args.batch_size,
+            shuffle=bool(kwargs["shuffle"]),
+        )
+        print("Dataloader done ...")
+
+    def _build_masterpraktikum_dataloader_old(self):
         kwargs = {
             "num_workers": self.args.n_cpu,
             "shuffle": self.args.shuffle,
@@ -378,9 +458,8 @@ class MultimodalGAN:
             shuffle=bool(kwargs["shuffle"]),
         )
 
-
     def embedding(
-        self, dataloader, unify_modal="img"
+            self, dataloader, unify_modal="img"
     ):  # actually encodes / makes predictions
         self.set_model_status(training=False)
         with torch.no_grad():
