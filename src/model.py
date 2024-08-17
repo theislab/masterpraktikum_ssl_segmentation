@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
 
-from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA_on_modal
+from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA
 
 logging.basicConfig(
     level=logging.INFO,
@@ -314,24 +314,31 @@ class MultimodalGAN:
                                 batch_size=self.args.batch_size,
                                 shuffle=True)
         img_embed = []
-        for load in img_loader:
-            img_embed.extend(self.vis_trans.calc_embed(load))
+        for imgs in tqdm(img_loader):
+            img_embed.extend(self.vit.forward(imgs))
         img_embed = torch.stack(img_embed)
         print('images embedded')
         # use pca to get same dimension:
-        if self.config['img_latent_dim'] != self.config['txt_latent_dim']:  # only in case that the dim are not the same
-            print("Running PCA since dimensions don't match")
-            if self.latent_dim == self.config['img_latent_dim']:  # if the min is the image dim
-                h5ad_embed = run_PCA_on_modal(h5ad_embed, self.latent_dim)
-                print("adjusting gene expression data to image dimension")
+        if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
+            print("Running PCA since text and image dimensions don't match...")
+            n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
+            self.n_components = self.latent_dim
+            if n_samples < self.n_components:
+                print("Running PCA on GEX and image embeddings...")
+                self.n_components = min(n_samples, 50)
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
+                img_embed = run_PCA(img_embed, self.n_components)
+            elif self.n_components == self.config["img_latent_dim"]:
+                print("Running PCA on GEX embeddings...")
+                h5ad_embed = run_PCA(h5ad_embed, self.n_components)
             else:
-                img_embed = run_PCA_on_modal(img_embed, self.latent_dim)
-                print("adjusting image data to gene expression dimension")
+                print("Running PCA on image embeddings...")
+                img_embed = run_PCA(img_embed, self.n_components)
 
         # add 0 / 1 so we can distinguish the modalities
         modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        return torch.cat((h5ad_embed, img_embed), dim=0).to(self.config['device']), modalities
+        return torch.cat((h5ad_embed, img_embed), dim=0).to(DEVICE), modalities
 
     def _build_masterpraktikum_dataloader(self):
         kwargs = {

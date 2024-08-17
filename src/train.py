@@ -107,7 +107,7 @@ if __name__ == '__main__':
     train_embedding = model.embedding(
         model.train_loader, unify_modal='txt')
     # TODO: save train_embedding
-    np.save(DAT_DIR, train_embedding)
+    np.save(os.path.join(DAT_DIR, 'train_embeds'), train_embedding)
     
     # test_embedding, test_target, test_modality = model.embedding( no test set as of now
     #    model.test_loader, unify_modal='img')

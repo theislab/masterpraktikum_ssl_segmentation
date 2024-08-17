@@ -11,7 +11,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.metrics.cluster import contingency_matrix
-from munkres import Munkres
 
 
 class h5ad_Dataset(Dataset):
@@ -22,7 +21,8 @@ class h5ad_Dataset(Dataset):
     def get_data(self, paths): # reads in the embeddings and concatenates them into one tensor for all the samples
         data = []
         for file in paths:
-            data.append(torch.from_numpy(np.load(file)))
+            d = torch.from_numpy(np.load(file))
+            data.append(d)
         return torch.cat(data)
 
 class img_Dataset(Dataset):
@@ -77,7 +77,7 @@ class Custom_Dataloader:
         length = math.ceil(batch_number)
         return length
 
-def recursive_file_list(start_path='.',endings = ('h5ad')):
+def recursive_file_list(start_path='.', endings = '.npy'):
     paths = []
     for root, dirs, files in os.walk(start_path):
         for file in files:
@@ -87,7 +87,7 @@ def recursive_file_list(start_path='.',endings = ('h5ad')):
 
 def split_data(paths):
     train, test = train_test_split(paths, test_size=0.15, random_state=42)
-    return train[1:5], test[1:5]
+    return train, test
 
 def run_PCA(x, n_components):
     x = x.detach().cpu().numpy()
