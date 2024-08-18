@@ -17,7 +17,7 @@ DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=20)
+parser.add_argument("--n_epochs", type=int, default=10)
 parser.add_argument("--batch_size", type=int, default=128)  # 128
 parser.add_argument("--lr_g", type=float, default=1e-4,  # 1e-4
                     help="adam: learning rate for G")
@@ -39,17 +39,17 @@ parser.add_argument("--clip_value", type=float, default=0.05,
 
 parser.add_argument("--n_cpu", type=int, default=8,
                     help="# of cpu threads during batch generation")
-parser.add_argument("--shuffle", type=int, default=1)
-parser.add_argument("--seed", type=int, default=2018)
+#parser.add_argument("--shuffle", type=int, default=1)
+#parser.add_argument("--seed", type=int, default=2018)
 
 parser.add_argument('--update_p_freq', type=int, default=10)
 parser.add_argument('--update_d_freq', type=int, default=5)
 parser.add_argument('--tol', type=int, default=1e-3)
-parser.add_argument('--save_freq', type=int, default=25)
+parser.add_argument('--save_freq', type=int, default=10)
 parser.add_argument('--log_freq', type=int, default=5)
 parser.add_argument('--test_freq', type=int, default=1)
-parser.add_argument('--pretrain', type=str, default='None',
-                    choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
+#parser.add_argument('--pretrain', type=str, default='None',
+#                    choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
 parser.add_argument('--dataset', type=str, default='masterpraktikum')
 parser.add_argument('--log_dir', type=str, default=LOG_DIR)
 parser.add_argument('--cpt_dir', type=str, default=CPT_DIR,
@@ -62,6 +62,7 @@ parser.add_argument('--h5ad_data', type=str, default=f'/p/project1/hai_pathology
                     help='path to GEX data')
 parser.add_argument('--img_data', type=str, default=f'/p/project1/hai_pathology/subgroup_merel/image_data/',  # change as needed
                     help='path to image data')
+parser.add_argument('--test', type=str, default='None')
 args = parser.parse_args()
 
 # reproducibility
@@ -91,23 +92,37 @@ if __name__ == '__main__':
 
     check_dir_exist(args.log_dir)
     check_dir_exist(args.cpt_dir)
-    args.cpt_dir = os.path.join(args.cpt_dir, current_time)
-    os.mkdir(args.cpt_dir)
 
-    model = MultimodalGAN(args, config)
     use_cuda = torch.cuda.is_available()
-    print(f"CUDA is available: {use_cuda}")
-    if use_cuda:
-        model.to_cuda()
+    model = MultimodalGAN(args, config)
+    if args.test == 'None':
+        args.cpt_dir = os.path.join(args.cpt_dir, current_time)
+        os.mkdir(args.cpt_dir)
+        print(f"CUDA is available: {use_cuda}")
+        if use_cuda:
+            model.to_cuda()
 
-    for epoch in range(args.n_epochs):
-        print(epoch)
-        model.train(epoch)
-    
-    train_embedding = model.embedding(
-        model.train_loader, unify_modal='txt')
-    # TODO: save train_embedding
-    np.save(os.path.join(DAT_DIR, 'train_embeds'), train_embedding)
+        for epoch in range(args.n_epochs):
+            print(epoch)
+            model.train(epoch)
+
+        train_embedding = model.embedding(
+            model.train_loader, unify_modal='txt')
+        # TODO: save train_embedding
+        np.save(os.path.join(DAT_DIR, 'train_embeds'), train_embedding)
+    else:
+        model.load_cpt(args.test)
+        orig_txt, latent_txt = model.embedding(model.test_loader_ordered, 'txt')
+        orig_img, latent_img = model.embedding(model.test_loader_ordered, 'img')
+
+        np.save(os.path.join(DAT_DIR, 'orig_txt'), orig_txt)
+        np.save(os.path.join(DAT_DIR, 'latent_txt'), latent_txt)
+        np.save(os.path.join(DAT_DIR, 'orig_img'), orig_img)
+        np.save(os.path.join(DAT_DIR, 'latent_img'), latent_img)
+
+
+
+
     
     # test_embedding, test_target, test_modality = model.embedding( no test set as of now
     #    model.test_loader, unify_modal='img')

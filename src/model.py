@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 
 from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA
+import pickle
 
 logging.basicConfig(
     level=logging.INFO,
@@ -372,19 +373,22 @@ class MultimodalGAN:
         self.set_model_status(training=False)
         with torch.no_grad():
             return_latent = None
+            orig_latent = None
             for step, (txt_embed, img_embed) in enumerate(dataloader):
                 txt_embed = txt_embed.to(DEVICE)
                 img_embed = img_embed.to(DEVICE)
                 if unify_modal == "img":
                     latent, _ = self.txt2img(txt_embed)
+                    orig_latent = img_embed
                 elif unify_modal == "txt":
                     latent, _ = self.img2txt(img_embed)
+                    orig_latent = txt_embed
                 else:
                     latent = (txt_embed, img_embed)
                 return_latent = (
                     latent if step == 0 else torch.cat([return_latent, latent], 0)
                 )
-            return return_latent.cpu().numpy()
+            return orig_latent.cpu().numpy(), return_latent.cpu().numpy()
 
     def set_model_status(self, training=True):
         if training:
@@ -421,10 +425,16 @@ class MultimodalGAN:
         self.logger.info("> Save checkpoint '{}'".format(cptpath))
         torch.save(state_dict, cptpath)
 
+        dtl_name = "{}_dtl_{}.pkl".format(self.args.dataset, epoch)
+        dtl_path = os.path.join(self.args.cpt_dir, dtl_name)
+
+        with open(dtl_path, 'wb') as f:
+            pickle.dump(self.test_loader_ordered, f)
+
     def load_cpt(self, cptpath):
         if os.path.isfile(cptpath):
             self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            dicts = torch.load(cptpath)
+            dicts = torch.load(os.path.join(cptpath, '{}_checkpt_{}.pkl'))
             self.epoch = dicts["epoch"]
             self.img2txt.load_state_dict(dicts["G12_state_dict"])
             self.txt2img.load_state_dict(dicts["G21_state_dict"])
@@ -432,6 +442,8 @@ class MultimodalGAN:
             self.D_txt.load_state_dict(dicts["D2_state_dict"])
             self.optimizer_G.load_state_dict(dicts["optimizer_G"])
             self.optimizer_D.load_state_dict(dicts["optimizer_D"])
+            with open(os.path.join(cptpath, '{}_dtl_{}.pkl'), 'rb') as f:
+                self.test_loader_ordered = pickle.load(f)
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:
             self.logger.error("> No checkpoint found at '{}'".format(cptpath))
