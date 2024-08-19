@@ -132,8 +132,12 @@ class MultimodalGAN:
             self.config["img_latent_dim"], self.config["txt_latent_dim"]
         )
 
-        print("Initializing data loaders...")
-        self._build_masterpraktikum_dataloader()
+        # only initialize datasets when training otherwise just oading saved dataloader
+        if(self.args.test == 'None'):
+            print("Initializing data loaders...")
+            self._build_masterpraktikum_dataloader()
+        else:
+            self.n_components = self.latent_dim
 
         # Generators
         self.img2txt = DeepAE(
@@ -301,7 +305,7 @@ class MultimodalGAN:
                     "Train/D_loss", D_loss.item(), step + len(self.train_loader) * epoch
                 )
 
-        if epoch > 10 and (epoch + 1) % self.args.save_freq == 0:
+        if  (epoch + 1) % self.args.save_freq == 0:
             self.save_cpt(epoch)
 
     def embed_and_prepare_data(self, img_data, h5ad_embed): # embeds images and prepares data test/train
@@ -326,7 +330,7 @@ class MultimodalGAN:
             self.n_components = self.latent_dim
             if n_samples < self.n_components:
                 print("Running PCA on GEX and image embeddings...")
-                self.n_components = min(n_samples, 50)
+                #self.n_components = min(n_samples, 50)
                 h5ad_embed = run_PCA(h5ad_embed, self.n_components)
                 img_embed = run_PCA(img_embed, self.n_components)
             elif self.n_components == self.config["img_latent_dim"]:
@@ -377,16 +381,20 @@ class MultimodalGAN:
             for step, (txt_embed, img_embed) in enumerate(dataloader):
                 txt_embed = txt_embed.to(DEVICE)
                 img_embed = img_embed.to(DEVICE)
+                orig = None
                 if unify_modal == "img":
                     latent, _ = self.txt2img(txt_embed)
-                    orig_latent = img_embed
+                    orig = img_embed
                 elif unify_modal == "txt":
                     latent, _ = self.img2txt(img_embed)
-                    orig_latent = txt_embed
+                    orig = txt_embed
                 else:
                     latent = (txt_embed, img_embed)
                 return_latent = (
                     latent if step == 0 else torch.cat([return_latent, latent], 0)
+                )
+                orig_latent = (
+                    orig if step == 0 else torch.cat([orig_latent, orig], 0)
                 )
             return orig_latent.cpu().numpy(), return_latent.cpu().numpy()
 
@@ -420,21 +428,22 @@ class MultimodalGAN:
             "optimizer_G": self.optimizer_G.state_dict(),
             "optimizer_D": self.optimizer_D.state_dict(),
         }
-        cptname = "{}_checkpt_{}.pkl".format(self.args.dataset, epoch)
+        cptname = "{}_checkpt_{}.pkl".format(os.path.basename(self.args.cpt_dir), epoch)
         cptpath = os.path.join(self.args.cpt_dir, cptname)
-        self.logger.info("> Save checkpoint '{}'".format(cptpath))
+        self.logger.info("> Save checkpoint '{}'".format(os.path.basename(self.args.cpt_dir)))
         torch.save(state_dict, cptpath)
-
-        dtl_name = "{}_dtl_{}.pkl".format(self.args.dataset, epoch)
+        # dataloader saving so that it can be initialized
+        dtl_name = "{}_dtl_{}.pkl".format(os.path.basename(self.args.cpt_dir), epoch)
         dtl_path = os.path.join(self.args.cpt_dir, dtl_name)
 
         with open(dtl_path, 'wb') as f:
             pickle.dump(self.test_loader_ordered, f)
 
-    def load_cpt(self, cptpath):
-        if os.path.isfile(cptpath):
+    def load_cpt(self, cptpath): # loading saved model dataloader
+        if os.path.isdir(cptpath):
             self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            dicts = torch.load(os.path.join(cptpath, '{}_checkpt_{}.pkl'))
+            #dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_5.pkl'))
+            dicts = torch.load(os.path.join(cptpath, f'masterpraktikum_checkpt_5.pkl'))
             self.epoch = dicts["epoch"]
             self.img2txt.load_state_dict(dicts["G12_state_dict"])
             self.txt2img.load_state_dict(dicts["G21_state_dict"])
@@ -442,7 +451,7 @@ class MultimodalGAN:
             self.D_txt.load_state_dict(dicts["D2_state_dict"])
             self.optimizer_G.load_state_dict(dicts["optimizer_G"])
             self.optimizer_D.load_state_dict(dicts["optimizer_D"])
-            with open(os.path.join(cptpath, '{}_dtl_{}.pkl'), 'rb') as f:
+            with open(os.path.join(cptpath, f'masterpraktikum_dtl_5.pkl'), 'rb') as f:
                 self.test_loader_ordered = pickle.load(f)
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:
