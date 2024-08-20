@@ -62,7 +62,7 @@ parser.add_argument('--h5ad_data', type=str, default=f'/p/project1/hai_pathology
                     help='path to GEX data')
 parser.add_argument('--img_data', type=str, default=f'/p/project1/hai_pathology/subgroup_merel/image_data/',  # change as needed
                     help='path to image data')
-parser.add_argument('--test', type=str, default='None') # either 'None' or a checkpoint
+parser.add_argument('--test', type=str, default='2024-08-19-15-15-28') # either 'None' or a checkpoint
 args = parser.parse_args()
 
 # reproducibility
@@ -107,7 +107,6 @@ if __name__ == '__main__':
         for epoch in range(args.n_epochs):
             print(epoch)
             model.train(epoch)
-            model.save_cpt(epoch)
 
         orig_embedding, train_embedding = model.embedding(
             model.train_loader, unify_modal='txt')

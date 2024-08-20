@@ -87,16 +87,16 @@ def recursive_file_list(start_path='.', endings = '.npy'):
 
 def split_data(paths):
     train, test = train_test_split(paths, test_size=0.15, random_state=42)
-    return train[:5], test[:1]
+    return train, test
 
 def run_PCA(x, n_components):
     x = x.detach().cpu().numpy()
     # scaling is primarily important if the scales of the features differ
     # x = StandardScaler().fit_transform(x)
-    #pca = PCA(n_components=n_components)
-    #x = pca.fit_transform(x)
-    #return torch.tensor(x)
-    return torch.tensor(x[:, :n_components])
+    pca = PCA(n_components=n_components)
+    x = pca.fit_transform(x)
+    return torch.tensor(x)
+    #return torch.tensor(x[:, :n_components])
 
 
 def best_map(L1, L2):

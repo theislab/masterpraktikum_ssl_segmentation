@@ -305,7 +305,7 @@ class MultimodalGAN:
                     "Train/D_loss", D_loss.item(), step + len(self.train_loader) * epoch
                 )
 
-        if  (epoch + 1) % self.args.save_freq == 0:
+        if (epoch + 1) % self.args.save_freq == 0:
             self.save_cpt(epoch)
 
     def embed_and_prepare_data(self, img_data, h5ad_embed): # embeds images and prepares data test/train
@@ -442,8 +442,7 @@ class MultimodalGAN:
     def load_cpt(self, cptpath): # loading saved model dataloader
         if os.path.isdir(cptpath):
             self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            #dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_5.pkl'))
-            dicts = torch.load(os.path.join(cptpath, f'masterpraktikum_checkpt_5.pkl'))
+            dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_9.pkl'))
             self.epoch = dicts["epoch"]
             self.img2txt.load_state_dict(dicts["G12_state_dict"])
             self.txt2img.load_state_dict(dicts["G21_state_dict"])
@@ -451,7 +450,7 @@ class MultimodalGAN:
             self.D_txt.load_state_dict(dicts["D2_state_dict"])
             self.optimizer_G.load_state_dict(dicts["optimizer_G"])
             self.optimizer_D.load_state_dict(dicts["optimizer_D"])
-            with open(os.path.join(cptpath, f'masterpraktikum_dtl_5.pkl'), 'rb') as f:
+            with open(os.path.join(cptpath, f'{os.path.basename(cptpath)}_dtl_9.pkl'), 'rb') as f:
                 self.test_loader_ordered = pickle.load(f)
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:
