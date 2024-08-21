@@ -17,7 +17,7 @@ DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=10)
+parser.add_argument("--n_epochs", type=int, default=20)
 parser.add_argument("--batch_size", type=int, default=128)  # 128
 parser.add_argument("--lr_g", type=float, default=1e-4,  # 1e-4
                     help="adam: learning rate for G")
@@ -62,7 +62,7 @@ parser.add_argument('--h5ad_data', type=str, default=f'/p/project1/hai_pathology
                     help='path to GEX data')
 parser.add_argument('--img_data', type=str, default=f'/p/project1/hai_pathology/subgroup_merel/image_data/',  # change as needed
                     help='path to image data')
-parser.add_argument('--test', type=str, default='2024-08-19-15-15-28') # either 'None' or a checkpoint
+parser.add_argument('--test', type=str, default='2024-08-21-17-26-48') # either 'None' or a checkpoint
 args = parser.parse_args()
 
 # reproducibility

@@ -13,9 +13,8 @@
 
 # *** start of job script **
 
-
-source $HOME/luknarova/bin/activate
 module load Python/3.11.3
+source /p/project1/hai_pathology/luknarova/venvs/luknarova2/bin/activate
 
 python3 src/train.py
 
