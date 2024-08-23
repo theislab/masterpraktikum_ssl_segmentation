@@ -439,10 +439,10 @@ class MultimodalGAN:
         with open(dtl_path, 'wb') as f:
             pickle.dump(self.test_loader_ordered, f)
 
-    def load_cpt(self, cptpath): # loading saved model dataloader
+    def load_cpt(self, cptpath, epoch): # loading saved model dataloader
         if os.path.isdir(cptpath):
             self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_9.pkl'))
+            dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_{epoch}.pkl'))
             self.epoch = dicts["epoch"]
             self.img2txt.load_state_dict(dicts["G12_state_dict"])
             self.txt2img.load_state_dict(dicts["G21_state_dict"])
@@ -450,7 +450,7 @@ class MultimodalGAN:
             self.D_txt.load_state_dict(dicts["D2_state_dict"])
             self.optimizer_G.load_state_dict(dicts["optimizer_G"])
             self.optimizer_D.load_state_dict(dicts["optimizer_D"])
-            with open(os.path.join(cptpath, f'{os.path.basename(cptpath)}_dtl_9.pkl'), 'rb') as f:
+            with open(os.path.join(cptpath, f'{os.path.basename(cptpath)}_dtl_{epoch}.pkl'), 'rb') as f:
                 self.test_loader_ordered = pickle.load(f)
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:

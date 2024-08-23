@@ -1,3 +1,38 @@
+2024/08/22 14:11:34: model [DEBUG] All settings used:
+2024/08/22 14:11:34: model [DEBUG] b1: 0.5
+2024/08/22 14:11:34: model [DEBUG] b2: 0.999
+2024/08/22 14:11:34: model [DEBUG] batch_size: 128
+2024/08/22 14:11:34: model [DEBUG] cellplm_model: 20230926_85M
+2024/08/22 14:11:34: model [DEBUG] clip_value: 0.05
+2024/08/22 14:11:34: model [DEBUG] cpt_dir: /p/project1/hai_pathology/luknarova/dm2c/masterpraktikum_ssl_segmentation/ckpt
+2024/08/22 14:11:34: model [DEBUG] dataset: masterpraktikum
+2024/08/22 14:11:34: model [DEBUG] gan_type: naive
+2024/08/22 14:11:34: model [DEBUG] h5ad_data: /p/project1/hai_pathology/embeddings/gex_embed/
+2024/08/22 14:11:34: model [DEBUG] hugging_face: google/vit-base-patch16-224
+2024/08/22 14:11:34: model [DEBUG] img_data: /p/project1/hai_pathology/subgroup_merel/image_data/
+2024/08/22 14:11:34: model [DEBUG] lamda1: 1.0
+2024/08/22 14:11:34: model [DEBUG] lamda3: 1.0
+2024/08/22 14:11:34: model [DEBUG] log_dir: /p/project1/hai_pathology/luknarova/dm2c/masterpraktikum_ssl_segmentation/logs/2024-08-21-17-26-48
+2024/08/22 14:11:34: model [DEBUG] log_freq: 5
+2024/08/22 14:11:34: model [DEBUG] lr_d: 0.0001
+2024/08/22 14:11:34: model [DEBUG] lr_g: 0.0001
+2024/08/22 14:11:34: model [DEBUG] n_cpu: 8
+2024/08/22 14:11:34: model [DEBUG] n_epochs: 20
+2024/08/22 14:11:34: model [DEBUG] save_freq: 10
+2024/08/22 14:11:34: model [DEBUG] seed: 2018
+2024/08/22 14:11:34: model [DEBUG] shuffle: 1
+2024/08/22 14:11:34: model [DEBUG] test: 2024-08-21-17-26-48
+2024/08/22 14:11:34: model [DEBUG] test_freq: 1
+2024/08/22 14:11:34: model [DEBUG] tol: 0.001
+2024/08/22 14:11:34: model [DEBUG] update_d_freq: 5
+2024/08/22 14:11:34: model [DEBUG] update_p_freq: 10
+2024/08/22 14:11:34: model [DEBUG] weight_decay: 0.0001
+2024/08/22 14:11:34: model [DEBUG] batchnorm: True
+2024/08/22 14:11:34: model [DEBUG] img2txt_hiddens: [512, 512]
+2024/08/22 14:11:34: model [DEBUG] img_latent_dim: 768
+2024/08/22 14:11:34: model [DEBUG] log_file: 2024-08-21-17-26-48_testing.txt
+2024/08/22 14:11:34: model [DEBUG] txt2img_hiddens: [512, 512]
+2024/08/22 14:11:34: model [DEBUG] txt_latent_dim: 512
 2024/08/22 14:28:50: model [DEBUG] All settings used:
 2024/08/22 14:28:50: model [DEBUG] b1: 0.5
 2024/08/22 14:28:50: model [DEBUG] b2: 0.999
@@ -35,7 +70,3 @@
 2024/08/22 14:28:50: model [DEBUG] txt_latent_dim: 512
 2024/08/22 14:30:59: model [INFO] > Create writer at '/p/project1/hai_pathology/luknarova/dm2c/masterpraktikum_ssl_segmentation/logs/2024-08-21-17-26-48'
 2024/08/22 14:30:59: model [INFO] > Load checkpoint '/p/project1/hai_pathology/luknarova/dm2c/masterpraktikum_ssl_segmentation/ckpt/2024-08-21-17-26-48'
-/p/project1/hai_pathology/luknarova/dm2c/masterpraktikum_ssl_segmentation/src/model.py:445: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_{epoch}.pkl'))
-/p/project1/hai_pathology/luknarova/venvs/luknarova2/lib/python3.11/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  return torch.load(io.BytesIO(b))
