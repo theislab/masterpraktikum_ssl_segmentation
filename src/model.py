@@ -85,7 +85,7 @@ class CellPLM_AE:
         )
         return embedding
 
-'''
+
 
 class ViT_AE:
     def __init__(self, hugging_face: str):
@@ -107,7 +107,7 @@ class ViT_AE:
 
         embeds = [infer(image) for image in x]
         return torch.stack(embeds)
-
+'''
 
 class MultimodalGAN:
     def __init__(self, args, config):
@@ -124,7 +124,7 @@ class MultimodalGAN:
 
         # Encoders
         #self.cellplm = CellPLM_AE(self.args.cellplm_model)
-        self.vit = ViT_AE(self.args.hugging_face)
+        #self.vit = ViT_AE(self.args.hugging_face)
 
         self.latent_dim_img = self.config["img_latent_dim"]
         self.latent_dim_txt = self.config["txt_latent_dim"]
@@ -204,7 +204,7 @@ class MultimodalGAN:
 
     def train(self, epoch):
         self.set_model_status(training=True)
-        for step, (txt_embed, img_embed) in enumerate(self.train_loader):
+        for step, (txt_embed, img_embed) in tqdm(enumerate(self.train_loader)):
             # -----------------
             #  Train Generator
             # -----------------
@@ -308,12 +308,15 @@ class MultimodalGAN:
         if (epoch + 1) % self.args.save_freq == 0:
             self.save_cpt(epoch)
 
-    def embed_and_prepare_data(self, img_data, h5ad_embed): # embeds images and prepares data test/train
+    def prepare_data(self, img_embed, h5ad_embed): # embeds images and prepares data test/train
         # code has been adjust for using the embedded files instead of cellplm
         # no need for embedding
         # h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
         # same with images -- embed first (also just train)
         print('preparing data')
+        print(img_embed.shape)
+        print(h5ad_embed.shape)
+        '''
         img_loader = DataLoader(dataset=img_data,
                                 # image loader so that not all images are read into memory for embedding calculation
                                 batch_size=self.args.batch_size,
@@ -323,6 +326,7 @@ class MultimodalGAN:
             img_embed.extend(self.vit.forward(imgs))
         img_embed = torch.stack(img_embed)
         print('images embedded')
+        '''
         # use pca to get same dimension:
         if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
             print("Running PCA since text and image dimensions don't match...")
@@ -355,8 +359,8 @@ class MultimodalGAN:
         h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
         img_dataset = img_Dataset(self.args.img_data)
 
-        train_data, train_modal = self.embed_and_prepare_data(img_dataset.train, h5ad_dataset.train)
-        test_data, test_modal = self.embed_and_prepare_data(img_dataset.test, h5ad_dataset.test)
+        train_data, train_modal = self.prepare_data(img_dataset.train, h5ad_dataset.train)
+        test_data, test_modal = self.prepare_data(img_dataset.test, h5ad_dataset.test)
         print('data prepared')
 
         self.train_loader = Custom_Dataloader(

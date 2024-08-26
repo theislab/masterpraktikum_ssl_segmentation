@@ -27,14 +27,17 @@ class h5ad_Dataset(Dataset):
 
 class img_Dataset(Dataset):
     def __init__(self, img_path):
-        self.imgs = recursive_file_list(img_path, ('.jpg', '.jpeg', '.png', '.tif'))
-        self.train, self.test = split_data(self.imgs)
-
-    def __getitem__(self, index):
-        return self.imgs[index]
+        self.train_paths, self.test_paths = split_data(recursive_file_list(img_path))
+        self.train, self.test = self.get_data(self.train_paths), self.get_data(self.test_paths)
+    def get_data(self, paths): # reads in the embeddings and concatenates them into one tensor for all the samples
+        data = []
+        for file in paths:
+            d = torch.from_numpy(np.load(file))
+            data.append(d)
+        return torch.stack(data)
 
     def __len__(self):
-        return len(self.imgs)
+        return len(self.train), len(self.test)
 
 
 class Custom_Dataloader:
