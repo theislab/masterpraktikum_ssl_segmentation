@@ -4,13 +4,12 @@ import os
 import time
 import argparse
 
-import numpy as np
 import torch
 from sklearn.cluster import KMeans
 
 from model import MultimodalGAN
 from utils import calculate_metrics, check_dir_exist
-
+import numpy as np
 
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
 CPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../ckpt"))
@@ -18,7 +17,7 @@ DAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data"))
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../logs"))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=20)
+parser.add_argument("--n_epochs", type=int, default=100)
 parser.add_argument("--batch_size", type=int, default=128)  # 128
 parser.add_argument("--lr_g", type=float, default=1e-4,  # 1e-4
                     help="adam: learning rate for G")
@@ -46,11 +45,11 @@ parser.add_argument("--seed", type=int, default=2018)
 parser.add_argument('--update_p_freq', type=int, default=10)
 parser.add_argument('--update_d_freq', type=int, default=5)
 parser.add_argument('--tol', type=int, default=1e-3)
-parser.add_argument('--save_freq', type=int, default=25)
+parser.add_argument('--save_freq', type=int, default=10)
 parser.add_argument('--log_freq', type=int, default=5)
 parser.add_argument('--test_freq', type=int, default=1)
-parser.add_argument('--pretrain', type=str, default='None',
-                    choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
+# parser.add_argument('--pretrain', type=str, default='None',
+#                    choices=['img', 'txt', 'load_ae', 'load_all', 'None'])
 parser.add_argument('--dataset', type=str, default='masterpraktikum')
 parser.add_argument('--log_dir', type=str, default=LOG_DIR)
 parser.add_argument('--cpt_dir', type=str, default=CPT_DIR,
@@ -59,19 +58,13 @@ parser.add_argument('--cellplm_model', type=str, default='20230926_85M',
                     help='CellPLM ckpt')
 parser.add_argument('--hugging_face', type=str, default='google/vit-base-patch16-224',
                     help='Hugging Face ViT identifier')
-#parser.add_argument('--h5ad_data', type=str, default=f'{DAT_DIR}/anndata/GSM3587923_AML1012-D0.h5ad',  # change as needed
-#                    help='path to GEX data')
-parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/embeddings/Concatenated.npy',
+parser.add_argument('--h5ad_data', type=str, default=f'/p/project1/hai_pathology/embeddings/gex_embed/',
+                    # change as needed
                     help='path to GEX data')
-#parser.add_argument('--h5ad_data', type=str, default='/p/project1/hai_pathology/embeddings/gex_embed/GSM3587923_AML1012-D0.npy',
-#                    help='path to GEX data')
-#parser.add_argument('--img_data', type=str, default=f'{DAT_DIR}/imgs/control/AEC',  # change as needed
-#                    help='path to image data')
-#parser.add_argument('--img_data', type=str, default='/p/project1/hai_pathology/subgroup_merel/image_data/control/AEC',  # change as needed
-#                    help='path to image data')
-parser.add_argument('--img_data', type=str, default='/p/project1/hai_pathology/subgroup_merel/image_data/',
+parser.add_argument('--img_data', type=str, default=f'/p/project1/hai_pathology/embeddings/img_embed/',
+                    # change as needed
                     help='path to image data')
-parser.add_argument('--test', type=str, default='None') # either 'None' or a checkpoint
+parser.add_argument('--test', type=str, default='None')  # either 'None' or a checkpoint
 args = parser.parse_args()
 
 # reproducibility
@@ -81,6 +74,52 @@ torch.backends.cudnn.benchmark = False
 # torch.backends.cudnn.benchmark = True
 
 METRIC_PRINT = 'metrics: ' + ', '.join(['{:.4f}'] * 7)
+
+
+def perform_hyperparameter_run(n, batch_size, lr_g, lr_d, gan_type, log_dir, cpt_dir):
+    args.batch_size = batch_size
+    args.lr_g = lr_g
+    args.lr_d = lr_d
+    args.gan_type = gan_type
+
+    print(n)
+
+    current_time = time.strftime(
+        "%Y-%m-%d-%H-%M-%S", time.localtime(time.time()))
+    config['log_file'] = current_time + '.txt'
+    args.cpt_dir = os.path.join(cpt_dir, current_time + '_' + str(n))
+    args.log_dir = os.path.join(log_dir, current_time + '_' + str(n))
+    os.mkdir(args.cpt_dir)
+    os.mkdir(args.log_dir)
+
+    model = MultimodalGAN(args, config)
+
+    if use_cuda:
+        model.to_cuda()
+    generator_loss = 100
+    discriminator_loss = 100
+    for epoch in range(args.n_epochs):
+        print(epoch)
+        generator_loss, discriminator_loss = model.train(epoch)
+        model.save_cpt(epoch)
+        # solutions.append((config["img_latent_dim"], config["batch_size"], generator_loss, discriminator_loss))
+    return config["img_latent_dim"], args.batch_size, generator_loss, discriminator_loss
+
+
+# Identify Pareto-optimal configurations
+def identify_pareto_optimal(solutions):
+    pareto_optimal = []
+    for i, solution in enumerate(solutions):
+        dominated = False
+        for j, other_solution in enumerate(solutions):
+            if i != j:
+                if all(other_solution <= solution) and any(other_solution < solution):
+                    dominated = True
+                    break
+        if not dominated:
+            pareto_optimal.append(solution)
+    return pareto_optimal
+
 
 if __name__ == '__main__':
     config = dict()
@@ -100,34 +139,44 @@ if __name__ == '__main__':
 
     use_cuda = torch.cuda.is_available()
     if args.test == 'None':
-        current_time = time.strftime(
-            "%Y-%m-%d-%H-%M-%S", time.localtime(time.time()))
-        config['log_file'] = current_time + '.txt'
-        args.cpt_dir = os.path.join(args.cpt_dir, current_time)
-        args.log_dir = os.path.join(args.log_dir, current_time)
-        os.mkdir(args.cpt_dir)
-        os.mkdir(args.log_dir)
-        model = MultimodalGAN(args, config)
+        batch_sizes = [128, 64]
+        learning_rates_g = [1e-3, 1e-4, 1e-5]
+        learning_rates_d = [1e-3, 1e-4, 1e-5]
+        loss_types = ['naive', 'wasserstein']
+        log_dir = args.log_dir
+        cpt_dir = args.cpt_dir
+        n = 0
+        solutions = []
+        for batch_size in batch_sizes:
+            for lr_g in learning_rates_g:
+                for lr_d in learning_rates_d:
+                    # for gan_type in loss_types:
+                    gan_type = 'naive'
+                    solution = perform_hyperparameter_run(n, batch_size=batch_size, lr_g=lr_g, lr_d=lr_d,
+                                                          gan_type=gan_type, log_dir=log_dir, cpt_dir=cpt_dir)
+                    solutions.append(solution)
+                    n += 1
 
-        print(f"CUDA is available: {use_cuda}")
-        if use_cuda:
-            model.to_cuda()
+        pareto_optimal_solutions = identify_pareto_optimal(np.array(solutions)[:, 2:])
+        print("pareto_optimal_solutions: ", pareto_optimal_solutions)
 
-        for epoch in range(args.n_epochs):
-            print(epoch)
-            model.train(epoch)
-            model.save_cpt(epoch)
+        f = open("results.txt", "a")
+        f.write("pareto_optimal_solutions: ")
+        f.write(str(pareto_optimal_solutions))
+        f.close()
 
-        orig_embedding, train_embedding = model.embedding(
-            model.train_loader, unify_modal='txt')
+        # orig_embedding, train_embedding = model.embedding(
+        #    model.train_loader, unify_modal='txt')
 
-        np.save(os.path.join(DAT_DIR, 'train_embeds'), train_embedding)
+        # TODO: save train_embedding
+        # np.save(os.path.join(DAT_DIR, 'train_embeds'), train_embedding)
     else:  # testing initialized
+        epoch = 19
         args.log_dir = os.path.join(args.log_dir, args.test)  # adding a log dir
         config['log_file'] = args.test + '_testing' + '.txt'
         model = MultimodalGAN(args, config)
         print('testing...')
-        model.load_cpt(os.path.join(args.cpt_dir, args.test))
+        model.load_cpt(os.path.join(args.cpt_dir, args.test), epoch=19)
         if use_cuda:
             model.to_cuda()
         print('model loaded, now embedding')
@@ -142,3 +191,11 @@ if __name__ == '__main__':
 
     # test_embedding, test_target, test_modality = model.embedding( no test set as of now
     #    model.test_loader, unify_modal='img')
+    # no need for kmeans
+    # kmeans = KMeans(config['n_clusters'], max_iter=1000,
+    #                tol=5e-5, n_init=20).fit(train_embedding)
+    # train_metrics = calculate_metrics(train_target, kmeans.labels_)
+    # y_pred = kmeans.predict(test_embedding)
+    # test_metrics = calculate_metrics(test_target, y_pred)
+    # print('>Train', METRIC_PRINT.format(*train_metrics))
+    # print('>Test ', METRIC_PRINT.format(*test_metrics))

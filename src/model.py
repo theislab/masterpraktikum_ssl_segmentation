@@ -5,27 +5,18 @@ from __future__ import print_function, absolute_import, division
 import os
 import logging
 import itertools
-from os.path import isfile, join
 
-import anndata
-import numpy as np
-import tf as tf
-from PIL import Image
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from transformers import ViTImageProcessor, ViTForImageClassification
-from CellPLM.pipeline.cell_embedding import CellEmbeddingPipeline
 
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch import nn
-from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
-import tensorflow as tf
 
 from utils import h5ad_Dataset, img_Dataset, Custom_Dataloader, run_PCA
+import pickle
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,48 +63,6 @@ class DeepAE(nn.Module):
         return output, latent
 
 
-'''
-class CellPLM_AE:
-    def __init__(self, model: str):
-        ckpt_directory = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "../ckpt")
-        )
-        self.pipeline = CellEmbeddingPipeline(
-            pretrain_prefix=model,  # specify the pretrain checkpoint to load
-            pretrain_directory=ckpt_directory,
-        )
-        self.device = DEVICE
-
-    def forward(self, x: anndata.AnnData):
-        embedding = self.pipeline.predict(
-            x, device=self.device  # x: AnnData object  # device: gpu or cpu
-        )
-        return embedding
-'''
-
-
-class ViT_AE:
-    def __init__(self, hugging_face: str):
-        self.processor = ViTImageProcessor.from_pretrained(hugging_face)
-        self.model = ViTForImageClassification.from_pretrained(
-            hugging_face, output_hidden_states=True
-        )
-
-    def forward(self, x):
-        def infer(img):
-            img = Image.open(img).convert("RGB")
-            inputs = self.processor(
-                img, return_tensors="pt"
-            )  # preprocesses for correct input format
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                hidden_states = outputs.hidden_states
-            return hidden_states[-1][0][0]
-
-        embeds = [infer(image) for image in x]
-        return torch.stack(embeds)
-
-
 class MultimodalGAN:
     def __init__(self, args, config):
         print("Initializing MultimodalGAN...")
@@ -126,10 +75,6 @@ class MultimodalGAN:
             self.logger.debug("{0}: {1}".format(k, v))
         for k, v in sorted(self.config.items()):
             self.logger.debug("{0}: {1}".format(k, v))
-
-        # Encoders
-        # self.cellplm = CellPLM_AE(self.args.cellplm_model)
-        self.vit = ViT_AE(self.args.hugging_face)
 
         self.latent_dim_img = self.config["img_latent_dim"]
         self.latent_dim_txt = self.config["txt_latent_dim"]
@@ -205,14 +150,13 @@ class MultimodalGAN:
             )
 
         self.set_writer()
-        #with self.writer.as_default():
-        #    tf.summary.text("run_args", self.args, step=0)
+        info_str = f"batch_size={args.batch_size}\nlr_g={args.lr_g}\nlr_d={args.lr_d}\ngan_type={args.gan_type}"
+        self.writer.add_text("Run info", info_str)
         self.adv_loss_fn = F.binary_cross_entropy_with_logits
 
     def train(self, epoch):
         self.set_model_status(training=True)
-
-        for step, (txt_embed, img_embed) in enumerate(self.train_loader):
+        for step, (txt_embed, img_embed) in tqdm(enumerate(self.train_loader)):
             # -----------------
             #  Train Generator
             # -----------------
@@ -315,48 +259,25 @@ class MultimodalGAN:
 
         if (epoch + 1) % self.args.save_freq == 0:
             self.save_cpt(epoch)
+        return G_loss.item(), D_loss.item()
 
-    def _build_masterpraktikum_dataloader(self):
-        kwargs = {
-            "num_workers": self.args.n_cpu,
-            "shuffle": self.args.shuffle,
-            "pin_memory": True,
-        }
+    def prepare_data(self, img_embed, h5ad_embed):  # embeds images and prepares data test/train
+        # code has been adjust for using the embedded files instead of cellplm
+        # no need for embedding
+        # h5ad_embed = self.cell_plm.calc_embed(h5ad_data)
+        # same with images -- embed first (also just train)
+        print('preparing data')
+        print(img_embed.shape)
+        print(h5ad_embed.shape)
 
-        print("Read gex embedding data...")
-        # self.args.h5ad_data = '/p/project1/hai_pathology/embeddings/gex_embed'
-        # h5ad_embed = [np.load(f) for f in os.listdir(self.args.h5ad_data)]
-
-        h5ad_embed = np.load(self.args.h5ad_data)
-        print("h5ad_embed shape: ", h5ad_embed.shape)
-
-        print("Embedding img data...")
-        # embed img data batch by batch
-        # img_dataset = img_Dataset(self.args.img_data)
-        img_dataset = [os.path.join(dp, f) for dp, dn, filenames in os.walk(self.args.img_data) for f in
-                       filenames]  # filenames recursively
-
-        img_loader = DataLoader(
-            dataset=img_dataset,
-            batch_size=self.args.batch_size,
-            shuffle=False,
-        )
-        img_embed = []
-        for imgs in tqdm(img_loader):
-            img_embed.extend(self.vit.forward(imgs))
-        print("Embedding img data done. Converting to numpy array...")
-        img_embed = np.array(img_embed)
-
-        print("img_embed shape: ", img_embed.shape)
-
-        # Run PCA to ensure both modalities have the same dimensions
-        if img_embed.shape[1] != h5ad_embed.shape[1]:
+        # use pca to get same dimension:
+        if self.config["img_latent_dim"] != self.config["txt_latent_dim"]:
             print("Running PCA since text and image dimensions don't match...")
             n_samples = min(h5ad_embed.shape[0], img_embed.shape[0])
             self.n_components = self.latent_dim
             if n_samples < self.n_components:
                 print("Running PCA on GEX and image embeddings...")
-                self.n_components = min(n_samples, 50)
+                # self.n_components = min(n_samples, 50)
                 h5ad_embed = run_PCA(h5ad_embed, self.n_components)
                 img_embed = run_PCA(img_embed, self.n_components)
             elif self.n_components == self.config["img_latent_dim"]:
@@ -365,35 +286,37 @@ class MultimodalGAN:
             else:
                 print("Running PCA on image embeddings...")
                 img_embed = run_PCA(img_embed, self.n_components)
-        h5ad_embed = torch.Tensor(h5ad_embed)
-        img_embed = torch.Tensor(img_embed)
 
-        # split into training and test set
-        h5ad_train, h5ad_test, h5ad_train_modalities, h5ad_test_modalities = train_test_split(
-            h5ad_embed, [0 for embed in h5ad_embed], test_size=0.2, random_state=42)
+        # add 0 / 1 so we can distinguish the modalities
+        modalities = [0 for embed in h5ad_embed] + [1 for embed in img_embed]
 
-        img_train, img_test, img_train_modalities, img_test_modalities = train_test_split(
-            img_embed, [1 for embed in img_embed], test_size=0.2, random_state=42)
+        return torch.cat((h5ad_embed, img_embed), dim=0).to(DEVICE), modalities
 
-        train_data = torch.cat((h5ad_train, img_train), dim=0)
-        train_modalities = h5ad_train_modalities + img_train_modalities
+    def _build_masterpraktikum_dataloader(self):
+        kwargs = {
+            "num_workers": self.args.n_cpu,
+            "shuffle": self.args.shuffle,
+            "pin_memory": True,
+        }
+
+        h5ad_dataset = h5ad_Dataset(self.args.h5ad_data)
+        img_dataset = img_Dataset(self.args.img_data)
+
+        train_data, train_modal = self.prepare_data(img_dataset.train, h5ad_dataset.train)
+        test_data, test_modal = self.prepare_data(img_dataset.test, h5ad_dataset.test)
+        print('data prepared')
 
         self.train_loader = Custom_Dataloader(
             dataset=train_data,
-            modal=train_modalities,
+            modal=train_modal,
             batch_size=self.args.batch_size,
             shuffle=bool(kwargs["shuffle"]),
         )
 
-        test_data = torch.cat((h5ad_test, img_test), dim=0)
-        test_modalities = h5ad_test_modalities + img_test_modalities
-
-        self.test_loader = Custom_Dataloader(
-            dataset=test_data,
-            modal=test_modalities,
-            batch_size=self.args.batch_size,
-            shuffle=bool(kwargs["shuffle"]),
-        )
+        # TODO test_data; test_loader
+        self.test_loader_ordered = Custom_Dataloader(dataset=test_data, modal=test_modal,
+                                                     batch_size=self.args.batch_size,
+                                                     shuffle=False)
 
     def embedding(
             self, dataloader, unify_modal="img"
@@ -452,15 +375,21 @@ class MultimodalGAN:
             "optimizer_G": self.optimizer_G.state_dict(),
             "optimizer_D": self.optimizer_D.state_dict(),
         }
-        cptname = "{}_checkpt_{}.pkl".format(self.args.dataset, epoch)
+        cptname = "{}_checkpt_{}.pkl".format(os.path.basename(self.args.cpt_dir), epoch)
         cptpath = os.path.join(self.args.cpt_dir, cptname)
-        self.logger.info("> Save checkpoint '{}'".format(cptpath))
+        self.logger.info("> Save checkpoint '{}'".format(os.path.basename(self.args.cpt_dir)))
         torch.save(state_dict, cptpath)
+        # dataloader saving so that it can be initialized
+        dtl_name = "{}_dtl_{}.pkl".format(os.path.basename(self.args.cpt_dir), epoch)
+        dtl_path = os.path.join(self.args.cpt_dir, dtl_name)
 
-    def load_cpt(self, cptpath):
-        if os.path.isfile(cptpath):
+        with open(dtl_path, 'wb') as f:
+            pickle.dump(self.test_loader_ordered, f)
+
+    def load_cpt(self, cptpath, epoch):  # loading saved model dataloader
+        if os.path.isdir(cptpath):
             self.logger.info("> Load checkpoint '{}'".format(cptpath))
-            dicts = torch.load(cptpath)
+            dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_{epoch}.pkl'))
             self.epoch = dicts["epoch"]
             self.img2txt.load_state_dict(dicts["G12_state_dict"])
             self.txt2img.load_state_dict(dicts["G21_state_dict"])
@@ -468,8 +397,8 @@ class MultimodalGAN:
             self.D_txt.load_state_dict(dicts["D2_state_dict"])
             self.optimizer_G.load_state_dict(dicts["optimizer_G"])
             self.optimizer_D.load_state_dict(dicts["optimizer_D"])
-            # dicts = torch.load(os.path.join(cptpath, f'{os.path.basename(cptpath)}_checkpt_5.pkl'))
-            dicts = torch.load(os.path.join(cptpath, f'masterpraktikum_checkpt_5.pkl'))
+            with open(os.path.join(cptpath, f'{os.path.basename(cptpath)}_dtl_{epoch}.pkl'), 'rb') as f:
+                self.test_loader_ordered = pickle.load(f)
             # self.scheduler.load_state_dict(dicts['scheduler'])
         else:
             self.logger.error("> No checkpoint found at '{}'".format(cptpath))

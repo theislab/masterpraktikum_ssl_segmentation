@@ -2,44 +2,42 @@ from __future__ import print_function, absolute_import, division
 
 import os
 import math
-import anndata as ad
 import torch
 import numpy as np
 from torch.utils.data import Dataset
 from sklearn import metrics
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 from sklearn.metrics.cluster import contingency_matrix
-from munkres import Munkres
 
 
 class h5ad_Dataset(Dataset):
-    def __init__(self, h5ad_path):
-        self.data = self.prepare_h5ad(h5ad_path)
+    def __init__(self, h5ad_path):  # the data is directly read in as opposed to being encoded
+        self.train_paths, self.test_paths = split_data(recursive_file_list(h5ad_path))  # splitting the paths
+        self.train, self.test = self.get_data(self.train_paths), self.get_data(self.test_paths)
 
-    def prepare_h5ad(self, h5ad_path):
-        data = ad.read_h5ad(h5ad_path)
-        data.obs_names_make_unique()
-        return data
+    def get_data(self, paths):  # reads in the embeddings and concatenates them into one tensor for all the samples
+        data = []
+        for file in paths:
+            d = torch.from_numpy(np.load(file))
+            data.append(d)
+        return torch.cat(data)
 
 
 class img_Dataset(Dataset):
     def __init__(self, img_path):
-        self.imgs = self._get_image_paths(img_path)
+        self.train_paths, self.test_paths = split_data(recursive_file_list(img_path))
+        self.train, self.test = self.get_data(self.train_paths), self.get_data(self.test_paths)
 
-    def _get_image_paths(self, root_dir):
-        image_paths = []
-        for root, _, files in os.walk(root_dir):
-            for file in files:
-                if file.endswith(('.jpg', '.jpeg', '.png', '.tif')):  # Add more extensions if needed
-                    image_paths.append(os.path.join(root, file))
-        return image_paths
-
-    def __getitem__(self, index):
-        return self.imgs[index]
+    def get_data(self, paths):  # reads in the embeddings and concatenates them into one tensor for all the samples
+        data = []
+        for file in paths:
+            d = torch.from_numpy(np.load(file))
+            data.append(d)
+        return torch.stack(data)
 
     def __len__(self):
-        return len(self.imgs)
+        return len(self.train), len(self.test)
 
 
 class Custom_Dataloader:
@@ -70,9 +68,9 @@ class Custom_Dataloader:
                 yield torch.stack(txt_batch), torch.stack(img_batch)
                 txt_batch, img_batch = [], []
         if (
-            len(txt_batch) > 0
-            and len(img_batch) > 0
-            and len(txt_batch) == len(img_batch)
+                len(txt_batch) > 0
+                and len(img_batch) > 0
+                and len(txt_batch) == len(img_batch)
         ):  # returning last batch with size < batch_size
             yield torch.stack(txt_batch), torch.stack(img_batch)
 
@@ -83,12 +81,28 @@ class Custom_Dataloader:
         return length
 
 
+def recursive_file_list(start_path='.', endings='.npy'):
+    paths = []
+    for root, dirs, files in os.walk(start_path):
+        for file in files:
+            if file.endswith(endings):
+                paths.append(os.path.join(root, file))
+    return paths
+
+
+def split_data(paths):
+    train, test = train_test_split(paths, test_size=0.15, random_state=42)
+    return train, test
+
+
 def run_PCA(x, n_components):
+    x = x.detach().cpu().numpy()
     # scaling is primarily important if the scales of the features differ
     # x = StandardScaler().fit_transform(x)
     pca = PCA(n_components=n_components)
     x = pca.fit_transform(x)
     return torch.tensor(x)
+    # return torch.tensor(x[:, :n_components])
 
 
 def best_map(L1, L2):
