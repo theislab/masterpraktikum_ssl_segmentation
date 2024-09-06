@@ -205,10 +205,6 @@ class MultimodalGAN:
     def train(self, epoch):
         self.set_model_status(training=True)
         for step, (txt_embed, img_embed) in tqdm(enumerate(self.train_loader)):
-            # -----------------
-            #  Train Generator
-            # -----------------
-            self.optimizer_G.zero_grad()
 
             txt_embed = txt_embed.to(DEVICE)
             img_embed = img_embed.to(DEVICE)
@@ -230,24 +226,29 @@ class MultimodalGAN:
             txt_real = torch.ones(txt_batch_size, 1).to(DEVICE)
             txt_fake = torch.zeros(txt_batch_size, 1).to(DEVICE)
 
-            if self.args.gan_type == "naive":
-                d_loss = self.adv_loss_fn(
-                    self.D_img(txt2img_recon), txt_real
-                ) + self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
-            elif self.args.gan_type == "wasserstein":
-                d_loss = (
-                    -self.D_img(txt2img_recon).mean() - self.D_txt(img2txt_recon).mean()
-                )
-            else:
-                raise ValueError()
-            G_loss = recon_loss + self.args.lamda3 * d_loss
-            G_loss.backward()
-            self.optimizer_G.step()
+            # -----------------
+            #  Train Generator
+            # -----------------
+
+            if (step + 1) % self.args.update_g_freq == 1:
+                self.optimizer_G.zero_grad()
+                if self.args.gan_type == "naive":
+                    d_loss = self.adv_loss_fn(
+                            self.D_img(txt2img_recon), txt_real) + self.adv_loss_fn(self.D_txt(img2txt_recon), img_real)
+                elif self.args.gan_type == "wasserstein":
+                    d_loss = (
+                            -self.D_img(txt2img_recon).mean() - self.D_txt(img2txt_recon).mean()
+                    )
+                else:
+                    raise ValueError()
+                G_loss = recon_loss + self.args.lamda3 * d_loss
+                G_loss.backward()
+                self.optimizer_G.step()
 
             # ---------------------
             #  Train Discriminator
             # ---------------------
-            if (step + 1) % self.args.update_d_freq == 0:
+            if (step + 1) % self.args.update_d_freq == 1:
                 self.optimizer_D.zero_grad()
 
                 if self.args.gan_type == "naive":
@@ -282,7 +283,7 @@ class MultimodalGAN:
                     for p in self.D_txt.parameters():
                         p.data.clamp_(-self.args.clip_value, self.args.clip_value)
 
-            if (step + 1) % self.args.log_freq == 0:
+            if (step + 1) % self.args.log_freq == 1:
                 self.logger.info(
                     info_string1
                     % (
