@@ -1,7 +1,7 @@
 #!/bin/bash 
 #SBATCH --account=hai_pathology
 # budget account where contingent is taken from
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --job-name=luk_fusion
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
